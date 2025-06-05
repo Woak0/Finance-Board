@@ -51,6 +51,10 @@ class Debt:
             expected_repayment_timeframe = expected_repayment_timeframe,
         )
     
+class DebtManager:
+    def __init__(self):
+        self.debts = []
+    
 # --- Testing --- (Remove multi-line comment to test file)
 
 """
