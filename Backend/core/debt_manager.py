@@ -54,7 +54,24 @@ class Debt:
 class DebtManager:
     def __init__(self):
         self.debts = []
+
+    def add_debt(self, label: str, amount:float, comments: Optional[str]=None, expected_repayment_timeframe : Optional[str]=None):
+        new_debt = Debt(label, amount, comments=comments, expected_repayment_timeframe=expected_repayment_timeframe)
+        self.debts.append(new_debt)
+        
+        print(f"Debt '{new_debt.label}' added with ID {new_debt.id}")
+        return new_debt
     
+    def get_all_debts(self):
+        return self.debts
+
+    def get_debt_by_id(self, debt_id: str) -> Optional[Debt]:
+        for debt_object in self.debts:
+            if debt_object.id == debt_id:
+                return debt_object
+        return None
+
+
 # --- Testing --- (Remove multi-line comment to test file)
 
 """
@@ -102,4 +119,36 @@ if __name__ == "__main__":
     print(f"ID (auto-generated): {debt_minimal_args.id}")
     print(f"Date Incurred (auto-generated): {debt_minimal_args.date_incurred}")
     print(f"Comments (default): {debt_minimal_args.comments}")
+
+    print("\n--- Testing DebtManager ---")
+    manager = DebtManager()
+
+    print("\nAdding debts...")
+    debt1 = manager.add_debt(label="Groceries", amount=70.00, comments="Weekly Shopping")
+    debt2 = manager.add_debt(label="Concert Tickets", amount=120.00)
+    debt3 = manager.add_debt(label="Books", amount=35.20, expected_repayment_timeframe="1 month")
+
+    print("\nAll debts in manager:")
+    all_my_debts = manager.get_all_debts()
+    if not all_my_debts:
+        print("No debts in the manager.")
+    else:
+        for d in all_my_debts:
+            print(f"  - ID: {d.id}, Label: {d.label}, Amount: {d.amount}")
+
+    print(f"\nSearching for debt with ID: {debt1.id}")
+    found_debt = manager.get_debt_by_id(debt1.id)
+    if found_debt:
+        print(f"Found: Label: {found_debt.label}, Amount: {found_debt.amount}")
+    else:
+        print(f"Debt with ID {debt1.id} not found.")
+
+
+    fake_id = "this-id-does-not-exist"
+    print(f"\nSearching for debt with ID: {fake_id}")
+    not_found_debt = manager.get_debt_by_id(fake_id)
+    if not_found_debt:
+        print(f"Found: Label: {not_found_debt.label}, Amount: {not_found_debt.amount}")
+    else:
+        print(f"Debt with ID {fake_id} not found (Correctly returned None).")
 """
