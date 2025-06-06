@@ -48,6 +48,32 @@ class Payment:
             id = id,
             date_paid = date_paid
         )
+    
+class PaymentManager:
+    def __init__(self):
+        self.payments = []
+
+    def add_payment(self, debt_id : str, amount : float, label : Optional[str] = None, comments : Optional[str] = None) -> Payment:
+        new_payment = Payment(debt_id = debt_id, amount = amount, label=label, comments=comments)
+        self.payments.append(new_payment)
+
+        print(f"Payment of {new_payment.amount} has been made for debt {new_payment.debt_id} (ID: {new_payment: id})")
+
+        return new_payment
+    
+    def get_payments_for_debt(self, debt_id: str) -> list[Payment]:
+        Paylist = []
+
+        for payment_object in self.payments:
+            if payment_object.debt_id == debt_id:
+                Paylist.append(payment_object)
+
+        return Paylist
+
+
+    def get_all_payments(self) -> list[Payment]:
+        return self.payments
+
 
 # --- Testing --- (Remove multi-line comment to test file)
 """
