@@ -29,7 +29,14 @@ def calculate_payments_for_specific_debt(debt_id: str, all_payments: list[Paymen
             total_paid_for_this_debt = total_paid_for_this_debt + payment_object.amount
     return total_paid_for_this_debt
 
+def calculate_remaining_balance_for_specific_debt(debt_object: Debt, all_payments: list[Payment]) -> float:
+    initial_debt_amount = debt_object.amount
 
+    total_paid_for_this_debt = calculate_payments_for_specific_debt(debt_id = debt_object.id, all_payments=all_payments)
+
+    remaining_balance = initial_debt_amount - total_paid_for_this_debt
+
+    return remaining_balance
 
 
             
