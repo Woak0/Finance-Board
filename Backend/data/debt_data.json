@@ -1,0 +1,22 @@
+{
+    "debts": [
+        {
+            "id": "776c9fb4-e779-4ab6-904e-3c87f7a7926c",
+            "label": "Coffee",
+            "amount": 5,
+            "date_incurred": "2025-06-07T16:16:43.852098+00:00",
+            "comments": null,
+            "expected_repayment_timeframe": null
+        }
+    ],
+    "payments": [
+        {
+            "debt_id": "776c9fb4-e779-4ab6-904e-3c87f7a7926c",
+            "amount": 3,
+            "label": null,
+            "comments": null,
+            "id": "e0172c9c-a595-48da-b4fc-224b5093c795",
+            "date_paid": "2025-06-07T16:16:43.852098+00:00"
+        }
+    ]
+}

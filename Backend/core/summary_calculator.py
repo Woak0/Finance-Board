@@ -1,6 +1,6 @@
 from typing import List
-from debt_manager import Debt
-from payment_manager import Payment
+from Backend.core.debt_manager import Debt
+from Backend.core.payment_manager import Payment
 
 def calculate_total_debt_incurred(debts: list[Debt]) -> float:
     total_debt_incurred = 0.0
@@ -37,6 +37,3 @@ def calculate_remaining_balance_for_specific_debt(debt_object: Debt, all_payment
     remaining_balance = initial_debt_amount - total_paid_for_this_debt
 
     return remaining_balance
-
-
-            

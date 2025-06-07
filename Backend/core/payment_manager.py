@@ -57,7 +57,7 @@ class PaymentManager:
         new_payment = Payment(debt_id = debt_id, amount = amount, label=label, comments=comments)
         self.payments.append(new_payment)
 
-        print(f"Payment of {new_payment.amount} has been made for debt {new_payment.debt_id} (ID: {new_payment: id})")
+        print(f"Payment of {new_payment.amount} has been made for debt {new_payment.debt_id} (ID: {new_payment.id})")
 
         return new_payment
     

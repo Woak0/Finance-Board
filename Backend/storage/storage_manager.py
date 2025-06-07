@@ -34,7 +34,7 @@ class StorageManager:
                 "payments" : payments_data_to_save
             }
 
-            with open(self.filepath, 'w', indent=None) as json_file:
+            with open(self.filepath, 'w') as json_file:
                 json.dump(all_data_to_save, json_file, indent=4)
 
                 print(f"Data successfully saved to {self.filepath}")
