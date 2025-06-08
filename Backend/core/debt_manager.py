@@ -11,7 +11,7 @@ class Debt:
     id : str = field(default_factory=lambda: str(uuid.uuid4()))
     date_incurred : datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     comments : Optional[str] = None
-    expected_repayment_timeframe : Optional[str] = None
+    status: str = "active"
 
     def to_dict(self):
         """ Converts the debt object into a dictionary to be printed into a JSON file which will be loaded later so the data saves to the program"""
@@ -21,7 +21,7 @@ class Debt:
             "amount" : self.amount,
             "date_incurred" : self.date_incurred.isoformat(),
             "comments" : self.comments,
-            "expected_repayment_timeframe" : self.expected_repayment_timeframe
+            "status" : self.status
         }
         return data
     
@@ -40,7 +40,8 @@ class Debt:
         date_incurred_obj = datetime.fromisoformat(date_incurred_str)
 
         comments = data_dict.get("comments")
-        expected_repayment_timeframe = data_dict.get("expected_repayment_timeframe")
+
+        status = data_dict.get("status", "active")
 
         return cls(
             label = label,
@@ -48,15 +49,15 @@ class Debt:
             id = id,
             date_incurred = date_incurred_obj,
             comments = comments,
-            expected_repayment_timeframe = expected_repayment_timeframe,
+            status = status
         )
     
 class DebtManager:
     def __init__(self):
         self.debts = []
 
-    def add_debt(self, label: str, amount:float, comments: Optional[str]=None, expected_repayment_timeframe : Optional[str]=None):
-        new_debt = Debt(label, amount, comments=comments, expected_repayment_timeframe=expected_repayment_timeframe)
+    def add_debt(self, label: str, amount:float, comments: Optional[str]=None, status: str = "active"):
+        new_debt = Debt(label, amount, comments=comments)
         self.debts.append(new_debt)
         
         print(f"Debt '{new_debt.label}' added with ID {new_debt.id}")
