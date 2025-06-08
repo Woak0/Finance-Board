@@ -1,7 +1,14 @@
 from Backend.core.debt_manager import Debt, DebtManager
 from Backend.core.payment_manager import Payment, PaymentManager
 from Backend.storage.storage_manager import StorageManager
-from Backend.core.summary_calculator import *
+from Backend.core.summary_calculator import (calculate_total_debt_incurred,
+calculate_total_amount_paid,
+calculate_overall_remaining_balance,
+calculate_payments_for_specific_debt,
+calculate_remaining_balance_for_specific_debt,
+get_payments_for_debt,
+calculate_smart_eta,
+calculate_overall_eta)
 
 def main():
     StorageMana = StorageManager()
@@ -43,7 +50,10 @@ def main():
                 amount_str = input("Enter the amount: ")
                 try:
                     amount = float(amount_str)
-                    break
+                    if amount > 0:
+                        break
+                    else:
+                        print("Amount must be a positive number.")
                 except ValueError:
                     print("Invalid amount. Please enter a valid number (e.g., 50.75).")
             print(f"You entered a valid amount: {amount}")
@@ -54,49 +64,62 @@ def main():
             Debt_Manager.add_debt(label=debt_label, amount=amount, comments=comments_to_save)
 
         elif choice == '2':
-            print("\n--- Make Payment---")
-            all_debts = Debt_Manager.get_all_debts()
+            print("\n--- Make Payment ---")
+            
+            active_debts = [d for d in Debt_Manager.get_all_debts() if d.status == 'active']
 
-            if not all_debts:
-                print("There are no debts to make a payment on.\nReturning to main menu.")
+            if not active_debts:
+                print("There are no active debts to make a payment on. Returning to main menu.")
                 continue
 
-            for debt in all_debts:
+            print("Select an active debt to pay:")
+            for debt in active_debts:
                 short_debt_id = debt.id[:8]
                 date_str = debt.date_incurred.strftime("%Y-%m-%d")
-                print(f"ID: {short_debt_id} | Date: {date_str} | label: {debt.label} | Amount: ${debt.amount:.2f}")
+                rem_balance = calculate_remaining_balance_for_specific_debt(debt, Payment_Manager.get_all_payments())
+                print(f"ID: {short_debt_id} | Label: {debt.label:<20} | Remaining: ${rem_balance:8.2f}")
             
-            target_short_id = input("Enter the 8-character ID of the debt to pay: ")
-
+            target_short_id = input("\nEnter the 8-character ID of the debt to pay (or type 'c' to cancel): ")
             if target_short_id.lower() == 'c':
                 continue
 
             target_debt = None
-
-            for debt in all_debts:
+            for debt in active_debts:
                 if debt.id.startswith(target_short_id):
                     target_debt = debt
                     break
+            
             if target_debt is None:
-                print("Error: No debt found with that ID.")
+                print("Error: No active debt found with that ID.")
                 continue
 
             while True:
-                amount_str = input(f"Enter the amount to pay towards '{target_debt.label}': ")
+                amount_str = input(f"Enter the amount to pay towards '{target_debt.label}' (or 'c' to cancel): ")
+                if amount_str.lower() == 'c':
+                    target_debt = None 
+                    break
+
                 try:
                     amount = float(amount_str)
-                    break
+                    if amount > 0:
+                        break
+                    else:
+                        print("Payment amount must be positive.")
                 except ValueError:
                     print("Invalid amount. Please enter a valid number (e.g., 50.75).")
-            print(f"You entered a valid amount: {amount}\n Making payment of ${amount}")
 
-            user_comment = input("Enter any comments (Optional, Enter to skip): ")
+            if target_debt is None:
+                print("Payment cancelled.")
+                continue
+            
+            user_comment = input("Enter any comments for this payment (optional, press Enter to skip): ")
             comments_to_save = user_comment if user_comment else None
 
-            Payment_Manager.add_payment(debt_id = target_debt.id, amount=amount, label=target_debt.label, comments=comments_to_save)
+            Payment_Manager.add_payment(debt_id=target_debt.id, amount=amount, label=target_debt.label, comments=comments_to_save)
+            print(f"Successfully paid ${amount:.2f} towards '{target_debt.label}'.")
+
 
             all_payments_updated = Payment_Manager.get_all_payments()
-
             new_balance = calculate_remaining_balance_for_specific_debt(target_debt, all_payments_updated)
 
             if new_balance <= 0:
@@ -113,12 +136,17 @@ def main():
             total_debt_incurred = calculate_total_debt_incurred(current_debts)
             total_payments = calculate_total_amount_paid(current_payments)
 
-            Overall_balance = calculate_overall_remaining_balance(total_debt_incurred=total_debt_incurred, total_amount_paid=total_payments)
+            overall_balance = calculate_overall_remaining_balance(total_debt_incurred=total_debt_incurred, total_amount_paid=total_payments)
 
             print(f"Total Debt Incurred: ${total_debt_incurred:.2f}")
             print(f"Total Payments Made: ${total_payments:.2f}")
             print("-------------------------")
-            print(f"Overall Balance:     ${Overall_balance:.2f}")
+            print(f"Overall Balance:     ${overall_balance:.2f}")
+
+            if overall_balance > 0:
+                overall_eta_string = calculate_overall_eta(current_debts, current_payments)
+                print("-------------------------")
+                print(f"{overall_eta_string}")
 
         elif choice == '4':
             print("\n--- Listing all Debt Entries ---")

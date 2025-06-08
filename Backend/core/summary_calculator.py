@@ -94,6 +94,50 @@ def calculate_smart_eta(debt: Debt, all_payments: list[Payment]) -> str:
         formatted_date = eta_date.strftime("%b %d, %Y")
 
         return f"ETA: {formatted_date}"
+    
+def calculate_overall_eta(all_debts: list[Debt], all_payments: list[Payment]) -> str:
+    num_payments = len(all_payments)
+
+    if num_payments < 1:
+        return "N/A (No payments yet)"
+
+    total_debt = calculate_total_debt_incurred(all_debts)
+    total_paid = calculate_total_amount_paid(all_payments)
+    remaining_balance = total_debt - total_paid
+
+    if remaining_balance <= 0:
+        return "You are debt-free!"
+
+    active_debts = [d for d in all_debts if d.status == 'active']
+    if not active_debts:
+        return "N/A"
+
+    start_date = min(active_debts, key=lambda d: d.date_incurred).date_incurred
+    
+    latest_payment_date = max(all_payments, key=lambda p: p.date_paid).date_paid
+
+    duration = latest_payment_date - start_date
+    duration_in_days = duration.days
+
+    if duration_in_days < 1:
+        return "N/A (More time needed for a prediction)"
+
+    overall_velocity = total_paid / duration_in_days
+
+    if overall_velocity <= 0:
+        return "N/A (Payment velocity not positive)"
+
+    days_to_go = remaining_balance / overall_velocity
+
+    if days_to_go > 73000:
+        return "ETA: Over 200 years"
+    
+    today = datetime.now(timezone.utc)
+    freedom_date = today + timedelta(days=days_to_go)
+
+    formatted_date = freedom_date.strftime("%b %d, %Y")
+
+    return f"Debt-Free By: {formatted_date}"
         
 
 
