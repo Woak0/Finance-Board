@@ -95,6 +95,14 @@ def main():
 
             Payment_Manager.add_payment(debt_id = target_debt.id, amount=amount, label=target_debt.label, comments=comments_to_save)
 
+            all_payments_updated = Payment_Manager.get_all_payments()
+
+            new_balance = calculate_remaining_balance_for_specific_debt(target_debt, all_payments_updated)
+
+            if new_balance <= 0:
+                target_debt.status = "paid"
+                print(f"\n--- Congratulations! Debt '{target_debt.label}' has been paid off! ---")
+
 
         elif choice == '3':
             print("\n--- Showing Summary---")
@@ -115,6 +123,7 @@ def main():
         elif choice == '4':
             print("\n--- Listing all Debt Entries ---")
             all_debts = Debt_Manager.get_all_debts()
+            all_payments = Payment_Manager.get_all_payments()
 
             if not all_debts:
                 print("No debts recorded.")
@@ -122,10 +131,23 @@ def main():
                 for debt in all_debts:
                     short_debt_id = debt.id[:8]
                     date_str = debt.date_incurred.strftime("%Y-%m-%d")
-                    print(f"ID: {short_debt_id} | Date: {date_str} | label: {debt.label} | Amount: ${debt.amount:.2f} | Comments: {debt.comments}")
+                    status_display_text = ""
+
+                    if debt.status == "paid":
+                        status_display_text = "[Paid]"
+                    else:
+                        status_display_text = "[Active]"
+
+                    print(f"Status: {status_display_text} | ID: {short_debt_id} | Date: {date_str} | label: {debt.label} | Amount: ${debt.amount:.2f}")
+                    if debt.comments:
+                        print(f"      -> Comments: {debt.comments}")
+
+                    if debt.status == "active":
+                        eta_string = calculate_smart_eta(debt, all_payments)
+
+                        print(f"      -> {eta_string}")
 
             print("\n--- Listing all Payment Entries---")
-            all_payments = Payment_Manager.get_all_payments()
 
             if not all_payments:
                 print("No payments recorded.")
@@ -133,7 +155,10 @@ def main():
                 for payment in all_payments:
                     short_debt_id_for_payment = payment.debt_id[:8]
                     date_str_payment = payment.date_paid.strftime("%Y-%m-%d")
-                    print(f"  Date: {date_str_payment} | Paid ${payment.amount:7.2f} towards Debt ID {short_debt_id_for_payment} (Label: {payment.label} | Comments: {payment.comments})")
+                    print(f"  Date: {date_str_payment} | Paid ${payment.amount:7.2f} towards Debt ID {short_debt_id_for_payment} (Label: {payment.label})")
+                
+                    if payment.comments:
+                        print(f"      -> Comments: {payment.comments}")
         
         elif choice == '5':
             print("WARNING!!! YOU ARE ABOUT TO DELETE ALL SAVED DATA! TO CONFIRM, PLEASE TYPE: DELETE")

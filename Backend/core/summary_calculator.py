@@ -69,7 +69,7 @@ def calculate_smart_eta(debt: Debt, all_payments: list[Payment]) -> str:
 
         remaining_balance = debt.amount - total_paid
         if remaining_balance <= 0:
-            return "Paid off"
+            return "Paid"
         
         earliest_date = payments_for_this_debt[0].date_paid
         latest_date = payments_for_this_debt[-1].date_paid
