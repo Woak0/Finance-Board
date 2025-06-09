@@ -70,8 +70,12 @@ class PaymentManager:
 
         return Paylist
 
-
     def get_all_payments(self) -> list[Payment]:
+        return self.payments
+    
+    def delete_payments_by_id(self, debt_id_to_delete: str):
+        payments_to_keep = [payment for payment in self.payments if payment.debt_id != debt_id_to_delete]
+        self.payments = payments_to_keep
         return self.payments
 
 

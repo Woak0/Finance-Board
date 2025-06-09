@@ -71,6 +71,11 @@ class DebtManager:
             if debt_object.id == debt_id:
                 return debt_object
         return None
+    
+    def delete_debt_by_id(self, debt_id_to_delete: str):
+        kept_ids = [debt for debt in self.debts if debt.id != debt_id_to_delete]
+        self.debts = kept_ids
+        return self.debts
 
 
 # --- Testing --- (Remove multi-line comment to test file)

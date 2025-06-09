@@ -8,7 +8,8 @@ calculate_payments_for_specific_debt,
 calculate_remaining_balance_for_specific_debt,
 get_payments_for_debt,
 calculate_smart_eta,
-calculate_overall_eta)
+calculate_overall_eta,
+)
 
 def main():
     StorageMana = StorageManager()
@@ -38,6 +39,7 @@ def main():
         print("[3] Show summary")
         print("[4] List all entries")
         print("[5] Clear all saved data")
+        print("[6] Delete a Debt")
         print("[q] Quit and Save")
 
         choice = input("Enter your choice: ")
@@ -199,6 +201,47 @@ def main():
             else:
                 print("Cancelling...")
                 continue
+        
+        elif choice == '6':
+            current_debts = Debt_Manager.get_all_debts()
+
+            for debt in current_debts:
+                    short_debt_id = debt.id[:8]
+                    date_str = debt.date_incurred.strftime("%Y-%m-%d")
+                    status_display_text = ""
+
+                    if debt.status == "paid":
+                        status_display_text = "[Paid]"
+                    else:
+                        status_display_text = "[Active]"
+
+                    print(f"Status: {status_display_text} | ID: {short_debt_id} | Date: {date_str} | label: {debt.label} | Amount: ${debt.amount:.2f}")
+
+            target_short_id = input("\nEnter the 8-character ID of the debt to delete (or type 'c' to cancel): ")
+            if target_short_id.lower() == 'c':
+                continue
+
+            target_debt = None
+            for debt in current_debts:
+                if debt.id.startswith(target_short_id):
+                    target_debt = debt
+                    break
+
+            if target_debt is None:
+                print("Error: No active debt found with that ID.")
+                continue
+            print(f"You are about to delete {target_debt.label} permanently. Type DELETE to confirm.")
+
+            target_words = input("Type DELETE to confirm: ")
+
+            if target_words == 'DELETE':
+                Debt_Manager.delete_debt_by_id(target_debt.id)
+                Payment_Manager.delete_payments_by_id(target_debt.id)
+                print("Successfully deleted debt.")
+            else:
+                print("Cancelling...")
+
+
 
         elif choice.lower() == 'q':
             print("Quitting and Saving application...")
