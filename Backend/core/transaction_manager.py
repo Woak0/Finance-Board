@@ -9,7 +9,7 @@ class Transaction:
     entry_id : str
     transaction_type : str
     amount : float
-    label : Optional[str] = None
+    label : str
     comments : Optional[str] = None
     id : str = field(default_factory=lambda: str(uuid.uuid4()))
     date_paid : datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -59,7 +59,7 @@ class TransactionManager:
     def __init__(self):
         self.transactions = []
 
-    def add_transaction(self, entry_id : str, amount : float, transaction_type: str, label : Optional[str] = None, comments : Optional[str] = None) -> Transaction:
+    def add_transaction(self, entry_id : str, amount : float, transaction_type: str, label : str, comments : Optional[str] = None) -> Transaction:
         new_transaction = Transaction(entry_id = entry_id, amount = amount, label=label, comments=comments, transaction_type=transaction_type)
         self.transactions.append(new_transaction)
 

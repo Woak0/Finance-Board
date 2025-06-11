@@ -97,11 +97,18 @@ def main():
                         print("Amount must be positive.")
                 except ValueError: 
                     print("Invalid number.")
+            
+            while True:
+                transaction_label = input("Enter a label for this payment (e.g., 'Weekly payment'): ")
+                if transaction_label.strip():
+                    break
+                else:
+                    print("Payment label cannot be empty.")
 
             comments_input = input("Enter comments (optional): ")
             comments_to_save = comments_input if comments_input else None
 
-            transaction_manager.add_transaction(entry_id=target_entry.id, amount=amount, label=target_entry.label, comments=comments_to_save, transaction_type="payment")
+            transaction_manager.add_transaction(entry_id=target_entry.id, amount=amount, label=transaction_label, comments=comments_to_save, transaction_type="payment")
             print(f"Successfully paid ${amount:.2f}.")
 
             all_transactions = transaction_manager.get_all_transactions()
@@ -163,10 +170,17 @@ def main():
                 except ValueError: 
                     print("Invalid number.")
 
+            while True:
+                transaction_label = input("Enter a label for this repayment (e.g., 'Bank Transfer'): ")
+                if transaction_label.strip():
+                    break
+                else:
+                    print("Repayment label cannot be empty.")
+
             comments_input = input("Enter comments (optional): ")
             comments_to_save = comments_input if comments_input else None
 
-            transaction_manager.add_transaction(entry_id=target_entry.id, amount=amount, label=target_entry.label, comments=comments_to_save, transaction_type = "repayment")
+            transaction_manager.add_transaction(entry_id=target_entry.id, amount=amount, label=transaction_label, comments=comments_to_save, transaction_type = "repayment")
             print(f"Successfully received a repayment of ${amount:.2f}.")
 
             all_transactions = transaction_manager.get_all_transactions()
@@ -201,10 +215,14 @@ def main():
                 print("No transactions recorded.")
             else:
                 for trans in sorted(all_transactions, key=lambda t: t.date_paid):
-                    parent_entry = ledger_manager.get_entry_by_id(trans.entry_id)
-                    trans_type = "Payment on Debt" if parent_entry and parent_entry.entry_type == 'debt' else "Repayment on Loan"
                     
-                    print(f"\n  {trans.date_paid.strftime('%Y-%m-%d')} | ${trans.amount:7.2f} | {trans_type}")
+                    trans_type_display = "Unknown"
+                    if trans.transaction_type == "payment":
+                        trans_type_display = "Payment on Debt"
+                    elif trans.transaction_type == "repayment":
+                        trans_type_display = "Repayment on Loan"
+                    
+                    print(f"\n  {trans.date_paid.strftime('%Y-%m-%d')} | ${trans.amount:7.2f} | {trans_type_display}")
                     print(f"      Towards: '{trans.label}' (Entry ID: {trans.entry_id[:8]})")
                     if trans.comments:
                         print(f"      -> Comments: {trans.comments}")
@@ -215,7 +233,7 @@ def main():
             all_transactions = transaction_manager.get_all_transactions()
 
             debt_entries = [e for e in all_entries if e.entry_type == 'debt']
-            payment_transactions = [t for t in all_transactions if ledger_manager.get_entry_by_id(t.entry_id) and ledger_manager.get_entry_by_id(t.entry_id).entry_type == 'debt']
+            payment_transactions = [t for t in all_transactions if t.transaction_type == 'payment']
             
             total_debt = calculate_total_entry_amount(debt_entries)
             total_paid = calculate_total_transaction_amount(payment_transactions)
@@ -230,7 +248,7 @@ def main():
                 print(f"  {debt_eta_string}")
 
             loan_entries = [e for e in all_entries if e.entry_type == 'loan']
-            repayment_transactions = [t for t in all_transactions if ledger_manager.get_entry_by_id(t.entry_id) and ledger_manager.get_entry_by_id(t.entry_id).entry_type == 'loan']
+            repayment_transactions = [t for t in all_transactions if t.transaction_type == 'repayment']
 
             total_loaned = calculate_total_entry_amount(loan_entries)
             total_repaid = calculate_total_transaction_amount(repayment_transactions)
@@ -369,9 +387,8 @@ def main():
                     continue
 
                 print("Select a transaction to edit:")
-                for transactions in all_transactions:
-                    transaction_type_disp = f"({transaction.transaction_type.capitalize()})"
-                    print(f"ID: {entry.id[:8]} | {transaction_type_disp:<7} | Label: {entry.label}")
+                for transaction in all_transactions:
+                    print(f"ID: {transaction.id[:8]} | Date: {transaction.date_paid.strftime('%Y-%m-%d')} | Label: {transaction.label} | Amount: ${transaction.amount:,.2f}")
 
                 target_short_id = input("\nEnter the 8-character ID of the transaction to edit (or 'c' to cancel): ")
                 if target_short_id.lower() == 'c':
