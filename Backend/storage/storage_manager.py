@@ -2,84 +2,73 @@ import json
 import os
 
 class StorageManager:
-    def __init__(self, filepath='Backend/data/debt_data.json'):
+    def __init__(self, filepath='Backend/data/ledger_data.json'): 
         self.filepath = filepath
-
         os.makedirs(os.path.dirname(self.filepath), exist_ok=True)
 
-    def save_data(self, debt_manager, payment_manager):
+    def save_data(self, ledger_manager, transaction_manager):
+        """Saves the current state of entries and transactions to the JSON file."""
         try:
-            # ---- Debts ----
-            all_debt_objects = debt_manager.get_all_debts()
+            all_entries = ledger_manager.get_all_entries()
+            entries_to_save = [entry.to_dict() for entry in all_entries]
 
-            debts_data_to_save = []
-
-            for debt_object in all_debt_objects:
-                debt_dictionary = debt_object.to_dict()
-
-                debts_data_to_save.append(debt_dictionary)
-
-            # ---- Payments ----
-            all_payment_objects = payment_manager.get_all_payments()
-
-            payments_data_to_save = []
-
-            for payment_objects in all_payment_objects:
-                payment_dictionary = payment_objects.to_dict()
-
-                payments_data_to_save.append(payment_dictionary)
+            all_transactions = transaction_manager.get_all_transactions()
+            transactions_to_save = [transaction.to_dict() for transaction in all_transactions]
 
             all_data_to_save = {
-                "debts" : debts_data_to_save,
-                "payments" : payments_data_to_save
+                "ledger_entries": entries_to_save,
+                "transactions": transactions_to_save
             }
 
             with open(self.filepath, 'w') as json_file:
                 json.dump(all_data_to_save, json_file, indent=4)
-
-                print(f"Data successfully saved to {self.filepath}")
+            print(f"Data successfully saved to {self.filepath}")
 
         except IOError as e:
-            print (f"Error saving data to {self.filepath}: {e}")
+            print(f"Error saving data to {self.filepath}: {e}")
         except Exception as e:
-            print(f"An unexpected error occured during saving: {e}")
+            print(f"An unexpected error occurred during saving: {e}")
 
     def load_data(self) -> dict:
+        """Loads entries and transactions from the JSON file."""
+        empty_data = {"ledger_entries": [], "transactions": []}
+
         if not os.path.exists(self.filepath):
-            print(f"Data file {self.filepath} not found. Starting with no data.")
-            return ({"debts": [], "payments":[]})
-            
-    
+            print(f"Data file {self.filepath} not found. Starting with empty data.")
+            return empty_data
+        
         try:
             with open(self.filepath, 'r') as json_file:
                 file_content = json_file.read()
                 
                 if not file_content.strip():
                     print(f"Data file '{self.filepath}' is empty. Starting with empty data.")
-                    return ({"debts": [], "payments":[]})
+                    return empty_data
                 
                 json_file.seek(0)
-
                 loaded_data = json.load(json_file)
-
                 print(f"Data successfully loaded from '{self.filepath}'.")
 
-                if "debts" not in loaded_data:
-                    print("Warning: 'debts' key missing in loaded data. Defaulting to empty list.")
-                    loaded_data["debts"] = []
-                if "payments" not in loaded_data:
-                    print("Warning: 'payments' key missing in loaded data. Defaulting to empty list.")
-                    loaded_data["payments"] = []
+                if "ledger_entries" not in loaded_data and "debts" in loaded_data:
+                    print("Found old 'debts' key. Migrating to 'ledger_entries'.")
+                    loaded_data["ledger_entries"] = loaded_data.pop("debts")
+                
+                if "transactions" not in loaded_data and "payments" in loaded_data:
+                    print("Found old 'payments' key. Migrating to 'transactions'.")
+                    loaded_data["transactions"] = loaded_data.pop("payments")
+                
+                if "ledger_entries" not in loaded_data:
+                    loaded_data["ledger_entries"] = []
+                if "transactions" not in loaded_data:
+                    loaded_data["transactions"] = []
 
                 return loaded_data
-            print(f"Data successfully saved to {self.filepath}")
             
         except json.JSONDecodeError:
-            print(f"Error decoding JSON from '{self.filepath}'. FIle might be corrupted. Starting with empty data.")
-            return ({"debts": [], "payments":[]})
+            print(f"Error decoding JSON from '{self.filepath}'. File might be corrupt. Starting with empty data.")
+            return empty_data
         except IOError as e:
             print(f"Could not read file '{self.filepath}': {e}. Starting with empty data.")
-            return ({"debts": [], "payments":[]})
+            return empty_data
         except Exception as e:
-            print(f"An unexpected error occured while loading data: {e}. Starting with empty data.")
-            return ({"debts": [], "payments":[]})
+            print(f"An unexpected error occurred while loading data: {e}. Starting with empty data.")
