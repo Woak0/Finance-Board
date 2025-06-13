@@ -13,6 +13,7 @@ class Transaction:
     comments : Optional[str] = None
     id : str = field(default_factory=lambda: str(uuid.uuid4()))
     date_paid : datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    tags : list[str] = field(default_factory=list)
     
 
     def to_dict(self):
@@ -23,7 +24,8 @@ class Transaction:
             "label" : self.label,
             "comments" : self.comments,
             "id" : self.id,
-            "date_paid" : self.date_paid.isoformat()
+            "date_paid" : self.date_paid.isoformat(),
+            "tags" : self.tags
         }
         return data
     
@@ -45,6 +47,8 @@ class Transaction:
 
         transaction_type = data_dict.get("transaction_type")
 
+        tags = data_dict.get("tags", [])
+
         return cls(
             entry_id = entry_id,
             amount = amount,
@@ -52,15 +56,26 @@ class Transaction:
             comments = comments,
             id = id,
             date_paid = date_paid,
-            transaction_type = transaction_type
+            transaction_type = transaction_type,
+            tags = tags
         )
     
 class TransactionManager:
     def __init__(self):
         self.transactions = []
 
-    def add_transaction(self, entry_id : str, amount : float, transaction_type: str, label : str, comments : Optional[str] = None) -> Transaction:
-        new_transaction = Transaction(entry_id = entry_id, amount = amount, label=label, comments=comments, transaction_type=transaction_type)
+    def add_transaction(self, entry_id : str, amount : float, transaction_type: str, label : str, comments : Optional[str] = None, tags: Optional[list[str]] = None) -> Transaction:
+        tags_to_save = tags if tags is not None else []
+
+        new_transaction = Transaction(
+            entry_id = entry_id, 
+            amount = amount, 
+            label=label, 
+            comments=comments, 
+            transaction_type=transaction_type, 
+            tags = tags_to_save
+            )
+        
         self.transactions.append(new_transaction)
 
         print(f"Transaction of ${new_transaction.amount} has been made for entry {new_transaction.entry_id} (ID: {new_transaction.id})")
@@ -79,7 +94,7 @@ class TransactionManager:
     def get_all_transactions(self) -> list[Transaction]:
         return self.transactions
     
-    def delete_transaction_by_entry_id(self, transaction_id_to_delete: str):
+    def delete_transactions_by_entry_id(self, transaction_id_to_delete: str):
         transactions_to_keep = [transaction for transaction in self.transactions if transaction.entry_id != transaction_id_to_delete]
         self.transactions = transactions_to_keep
         return self.transactions

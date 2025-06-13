@@ -8,11 +8,13 @@ import json
 class LedgerEntry:
     label : str
     amount : float
+    entry_type: str
     id : str = field(default_factory=lambda: str(uuid.uuid4()))
     date_incurred : datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     comments : Optional[str] = None
     status: str = "active"
-    entry_type: str
+    
+    tags : list[str] = field(default_factory=list)
 
     def to_dict(self):
         """ Converts the debt object into a dictionary to be printed into a JSON file which will be loaded later so the data saves to the program"""
@@ -23,7 +25,8 @@ class LedgerEntry:
             "date_incurred" : self.date_incurred.isoformat(),
             "comments" : self.comments,
             "status" : self.status,
-            "entry_type" : self.entry_type
+            "entry_type" : self.entry_type,
+            "tags" : self.tags
         }
         return data
     
@@ -47,6 +50,8 @@ class LedgerEntry:
         
         entry_type = data_dict.get("entry_type")
 
+        tags = data_dict.get("tags", [])
+
         return cls(
             label = label,
             amount = amount,
@@ -54,15 +59,26 @@ class LedgerEntry:
             date_incurred = date_incurred_obj,
             comments = comments,
             status = status,
-            entry_type = entry_type
+            entry_type = entry_type,
+            tags = tags
         )
     
 class LedgerManager:
     def __init__(self):
         self.entries = []
 
-    def add_entry(self, label: str, amount:float, entry_type: str, comments: Optional[str]=None, status: str = "active"):
-        new_entry = LedgerEntry(label, amount, comments=comments, entry_type=entry_type)
+    def add_entry(self, label: str, amount:float, entry_type: str, comments: Optional[str]=None, status: str = "active", tags: Optional[list[str]] = None):
+        tags_to_save = tags if tags is not None else []
+
+        new_entry = LedgerEntry(
+            label=label, 
+            amount=amount, 
+            entry_type=entry_type, 
+            comments=comments, 
+            status=status,
+            tags=tags_to_save
+        )
+
         self.entries.append(new_entry)
         
         print(f"Entry '{new_entry.label}' added with ID {new_entry.id}")
