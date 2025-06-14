@@ -2,6 +2,7 @@ from typing import List, Optional
 from Backend.core.ledger_manager import LedgerEntry, LedgerManager
 from Backend.core.transaction_manager import Transaction, TransactionManager
 from Backend.storage.storage_manager import StorageManager
+from Backend.core.tag_manager import TagManager
 from Backend.ui_helpers import *
 
 
