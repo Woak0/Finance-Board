@@ -6,5 +6,8 @@
             "icon": "terminal-powershell"
         }
     },
-    "terminal.integrated.defaultProfile.windows": "PowerShell"
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.env.windows": {
+        "Path": "C:\\Users\\malek\\AppData\\Local\\Programs\\Python\\Python311;C:\\Users\\malek\\AppData\\Local\\Programs\\Python\\Python311\\Scripts;${env:Path}"
+    }
 }
