@@ -2,12 +2,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Module",
+            "name": "Run Financial Co-Pilot",
             "type": "debugpy",
             "request": "launch",
             "module": "Backend.main",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            "python": "${config:python.defaultInterpreterPath}" 
         }
     ]
 }
