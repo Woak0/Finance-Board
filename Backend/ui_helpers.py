@@ -93,7 +93,7 @@ def handle_add_entry(ledger_manager: LedgerManager, tag_manager: TagManager, ent
 
     ledger_manager.add_entry(label=label, amount=amount, entry_type=entry_type, comments=comments, tags=list(set(final_tags)))
 
-def handle_add_transaction(ledger_manager: LedgerManager, transaction_manager: TransactionManager, transaction_type: str):
+def handle_add_transaction(ledger_manager: LedgerManager, transaction_manager: TransactionManager, tag_manager: TagManager, transaction_type: str):
     """Handles adding a payment to a debt or a repayment for a loan."""
     entry_type = "debt" if transaction_type == "payment" else "loan"
     print(f"\n--- Record a {transaction_type.capitalize()} on a {entry_type.capitalize()} ---")
