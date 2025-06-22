@@ -3,6 +3,7 @@ from Backend.core.ledger_manager import LedgerManager, LedgerEntry
 from Backend.core.transaction_manager import TransactionManager, Transaction
 from Backend.core.tag_manager import TagManager, handle_edit_tags_ui
 from Backend.storage.storage_manager import StorageManager
+from Backend.core.export_manager import export_data_to_csv
 from Backend.core.summary_calculator import (
     calculate_total_entry_amount,
     calculate_total_transaction_amount,
@@ -33,7 +34,6 @@ def update_entry_status(entry: LedgerEntry, transaction_manager: TransactionMana
     if status_changed:
         print(f"\n--- Status Update: '{entry.label}' has been marked as [{entry.status.upper()}]. ---")
 
-# --- NEW: Unified Tag Selection UI ---
 def _handle_get_tags(tag_manager: TagManager) -> list[str] | None:
     """A helper to handle the complete tag selection process."""
     print("\n--- Select Standard Tags ---")
@@ -130,7 +130,6 @@ def handle_add_transaction(ledger_manager: LedgerManager, transaction_manager: T
     comments = get_string_input("Enter comments (optional)", allow_empty=True)
     if comments is None: return
     
-    # We will assume tag logic for transactions is a future feature and pass empty for now
     transaction_manager.add_transaction(entry_id=target_entry.id, amount=amount, label=label, comments=comments, transaction_type=transaction_type, tags=[])
     update_entry_status(target_entry, transaction_manager)
     print(f"Successfully recorded a {transaction_type} of ${amount:.2f}.")
@@ -369,3 +368,13 @@ def handle_edit_entry_main(ledger_manager: LedgerManager, transaction_manager: T
         _edit_transaction(ledger_manager, transaction_manager, tag_manager)
     else:
         print("Invalid choice.")
+
+def handle_export_data(ledger_manager: LedgerManager, transaction_manager: TransactionManager):
+    """Handles the UI flow for exporting data."""
+    print("\nExporting all data to CSV files...")
+    try:
+        # Call the actual export logic from the export_manager
+        export_data_to_csv(ledger_manager, transaction_manager)
+        print("Data export completed successfully. Check the 'Exports' directory.")
+    except Exception as e:
+        print(f"\nAn error occurred during export: {e}")

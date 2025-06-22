@@ -5,7 +5,6 @@ from Backend.storage.storage_manager import StorageManager
 from Backend.core.tag_manager import TagManager
 from Backend.ui_helpers import *
 
-
 def main():
     storage_manager = StorageManager()
     ledger_manager = LedgerManager()
@@ -28,7 +27,7 @@ def main():
     while True:
         print("\n--- Main Menu ---")
         print("[1] Add Debt | [2] Make Payment | [3] Add Loan | [4] Receive Repayment")
-        print("[L] List All | [S] Summary | [E] Edit | [D] Delete | [X] Clear All")
+        print("[D] Delete | [E] Edit | [S] Summary | [L] List All | [P] Export Data To CSV | [X] Clear All")
         print("[Q] Quit and Save")
 
         choice = input("Enter your choice: ").lower()
@@ -42,6 +41,7 @@ def main():
         elif choice == 'e': handle_edit_entry_main(ledger_manager, transaction_manager, tag_manager)
         elif choice == 'd': handle_delete_entry(ledger_manager, transaction_manager)
         elif choice == 'x': handle_clear_all_data(ledger_manager, transaction_manager)
+        elif choice == 'p': handle_export_data(ledger_manager, transaction_manager)
         elif choice == 'q': break
         else: print("Invalid choice.")
 
