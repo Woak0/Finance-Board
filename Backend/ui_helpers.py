@@ -4,15 +4,10 @@ from Backend.core.transaction_manager import TransactionManager, Transaction
 from Backend.core.tag_manager import TagManager, handle_edit_tags_ui
 from Backend.storage.storage_manager import StorageManager
 from Backend.core.export_manager import export_data_to_csv
-from Backend.core.summary_calculator import (
-    calculate_total_entry_amount,
-    calculate_total_transaction_amount,
-    calculate_overall_balance,
-    calculate_balance_for_entry,
-    get_transactions_for_entry,
-    calculate_entry_eta,
-    calculate_overall_eta,
-)
+from Backend.core.journal_manager import JournalManager
+from Backend.core.net_worth_manager import NetWorthManager
+from Backend.core.summary_calculator import *
+from Backend.utils.financial_algorithms import suggest_snowball_priority, calculate_what_if_eta
 
 storage_manager = StorageManager()
 ledger_manager = LedgerManager()
@@ -41,7 +36,7 @@ def _handle_get_tags(tag_manager: TagManager) -> list[str] | None:
     for i, tag in enumerate(standard_tags): print(f"  [{i+1}] {tag}")
     
     selection_input = get_string_input("Enter tag numbers, comma-separated (optional)", allow_empty=True)
-    if selection_input is None: return None # User cancelled
+    if selection_input is None: return None 
 
     final_tags = []
     if selection_input:
@@ -129,6 +124,9 @@ def handle_add_transaction(ledger_manager: LedgerManager, transaction_manager: T
 
     comments = get_string_input("Enter comments (optional)", allow_empty=True)
     if comments is None: return
+
+    tags = _handle_get_tags(tag_manager)
+    if tags is None: return 
     
     transaction_manager.add_transaction(entry_id=target_entry.id, amount=amount, label=label, comments=comments, transaction_type=transaction_type, tags=[])
     update_entry_status(target_entry, transaction_manager)
@@ -233,13 +231,17 @@ def handle_delete_entry(ledger_manager: LedgerManager, transaction_manager: Tran
         transaction_manager.delete_transactions_by_entry_id(target_entry.id)
         print(f"'{target_entry.label}' has been deleted.")
 
-def handle_clear_all_data(ledger_manager: LedgerManager, transaction_manager: TransactionManager):
-    """Handles the confirmation and clearing of all data."""
-    confirm = get_string_input("WARNING! This will delete all data. Type DELETE to confirm")
+def handle_clear_all_data(ledger_manager: LedgerManager, transaction_manager: TransactionManager, journal_manager: JournalManager, net_worth_manager: NetWorthManager):
+    """Handles the confirmation and clearing of ALL data."""
+    confirm = get_string_input("WARNING! This will delete all data across the entire application. Type DELETE to confirm")
     if confirm == 'DELETE':
         ledger_manager.entries.clear()
         transaction_manager.transactions.clear()
+        journal_manager.entries.clear()
+        net_worth_manager.snapshots.clear()
         print("All data has been cleared.")
+    else:
+        print("Operation cancelled.")
 
 # --- THE COMPLETE EDIT LOGIC ---
 
@@ -373,8 +375,76 @@ def handle_export_data(ledger_manager: LedgerManager, transaction_manager: Trans
     """Handles the UI flow for exporting data."""
     print("\nExporting all data to CSV files...")
     try:
-        # Call the actual export logic from the export_manager
         export_data_to_csv(ledger_manager, transaction_manager)
         print("Data export completed successfully. Check the 'Exports' directory.")
     except Exception as e:
         print(f"\nAn error occurred during export: {e}")
+
+# --- Advanced Logic UI Helpers ---
+
+def handle_debt_prioritization(ledger_manager: LedgerManager, transaction_manager: TransactionManager):
+    """Shows the user the suggested debt to pay off next using the Snowball method."""
+    print("\n--- Debt Payoff Strategy: Snowball Method ---")
+    print("This method suggests paying off the debt with the smallest remaining balance first.")
+    
+    active_debts = [e for e in ledger_manager.get_all_entries() if e.entry_type == 'debt' and e.status == 'active']
+    if not active_debts:
+        print("No active debts to prioritize.")
+        return
+
+    priority_debt = suggest_snowball_priority(active_debts, transaction_manager.get_all_transactions())
+    
+    if priority_debt:
+        balance = calculate_balance_for_entry(priority_debt, transaction_manager.get_all_transactions())
+        print(f"\nRecommendation: Focus extra payments on '{priority_debt.label}'.")
+        print(f"  -> Remaining Balance: ${balance:,.2f}")
+    else:
+        print("Congratulations! You have no remaining debt balances to prioritize.")
+
+def handle_net_worth_snapshot(ledger_manager: LedgerManager, transaction_manager: TransactionManager, net_worth_manager: NetWorthManager):
+    """Calculates and logs a new Net Worth Snapshot."""
+    print("\n--- Net Worth Tracker ---")
+    
+    debt_balance = sum(calculate_balance_for_entry(e, transaction_manager.get_all_transactions()) for e in ledger_manager.get_all_entries() if e.entry_type == 'debt')
+    loan_balance = sum(calculate_balance_for_entry(e, transaction_manager.get_all_transactions()) for e in ledger_manager.get_all_entries() if e.entry_type == 'loan')
+    net_position = loan_balance - debt_balance
+    
+    net_worth_manager.add_snapshot(net_position)
+    
+    print("\nRecent Snapshots:")
+    snapshots = net_worth_manager.get_all_snapshots()
+    for s in snapshots[:5]: 
+        print(f"  {s.date_recorded.strftime('%Y-%m-%d')}: ${s.net_position:,.2f}")
+
+def handle_journal(journal_manager: JournalManager):
+    """Handles adding and viewing journal entries."""
+    print("\n--- Financial Journal ---")
+    print("[1] Add New Journal Entry")
+    print("[2] View Recent Entries")
+    
+    choice = get_string_input("Select an option")
+    if choice is None: return
+    
+    if choice == '1':
+        content = get_string_input("Enter your journal entry", allow_empty=False)
+        if content:
+            journal_manager.add_entry(content)
+    elif choice == '2':
+        entries = journal_manager.get_all_entries()
+        if not entries:
+            print("No journal entries found.")
+        else:
+            for entry in entries:
+                print(f"\n- {entry.date_created.strftime('%Y-%m-%d %H:%M')} -")
+                print(f"  {entry.content}")
+    else:
+        print("Invalid choice.")
+
+def handle_what_if_scenario(ledger_manager: LedgerManager, transaction_manager: TransactionManager):
+    """Runs a 'what-if' calculation to show an accelerated payoff date."""
+    print("\n--- What-If Payoff Calculator ---")
+    extra_payment = get_positive_float_input("Enter a hypothetical EXTRA monthly payment amount")
+    if extra_payment is None: return
+    
+    eta_string = calculate_what_if_eta(ledger_manager.get_all_entries(), transaction_manager.get_all_transactions(), extra_payment)
+    print(f"\nResult: {eta_string}")
