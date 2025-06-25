@@ -24,7 +24,7 @@ class FinancialAnalyser:
         
         try:
             print("AI is analysing your data...")
-            outputs = self.llm_pipeline(prompt, max_new_tokens=256, num_return_sequences=1, do_sample=True, temperature=0.7, top_k=50, top_p=0.95)
+            outputs = self.llm_pipeline(prompt, max_new_tokens=256, num_return_sequences=1, do_sample=True, temperature=0.5, top_k=30, top_p=0.95)
             
             ai_response = outputs[0]['generated_text']
             assistant_response_start = ai_response.find("<|assistant|>")
