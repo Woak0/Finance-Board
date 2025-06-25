@@ -4,7 +4,9 @@ from Backend.storage.storage_manager import StorageManager
 from Backend.core.tag_manager import TagManager
 from Backend.core.journal_manager import JournalEntry, JournalManager
 from Backend.core.net_worth_manager import NetWorthSnapshot, NetWorthManager
+from Backend.core.ai_analyser import FinancialAnalyser
 from Backend.ui_helpers import *
+from Backend.utils.validators import *
 
 def main():
     # --- Startup ---
@@ -14,6 +16,7 @@ def main():
     tag_manager = TagManager()
     journal_manager = JournalManager()
     net_worth_manager = NetWorthManager()
+    ai_analyser = FinancialAnalyser()
 
     # Hydrate data from file
     all_data = storage_manager.load_data()
@@ -23,7 +26,7 @@ def main():
     net_worth_manager.snapshots = [NetWorthSnapshot.from_dict(n) for n in all_data["net_worth_snapshots"]]
 
     print("Welcome to your Financial Co-Pilot!")
-    print(f"Loaded {len(ledger_manager.entries)} entries and {len(transaction_manager.transactions)} transactions.")
+    print(f"Loaded {len(ledger_manager.entries)} entries, {len(transaction_manager.transactions)} transactions, {len(journal_manager.entries)} journal entries, and {len(net_worth_manager.snapshots)} net worth snapshots.")
 
     # --- Main Application Loop ---
     while True:
@@ -32,7 +35,7 @@ def main():
         print("[L] List All     | [E] Edit Entry     | [D] Delete Entry | [X] Clear All Data")
         print("[S] Summary      | [P] Export to CSV")
         print("\n--- Advanced Tools ---")
-        print("[A] Analyze Debt | [N] Log Net Worth  | [J] Journal      | [W] What-If Calc")
+        print("[A] Analyze Debt | [N] Log Net Worth  | [J] Journal      | [W] What-If Calc | [O] AI Assistant")
         print("[Q] Quit and Save")
 
         choice = input("Enter your choice: ").lower()
@@ -58,6 +61,7 @@ def main():
         elif choice == 'n': handle_net_worth_snapshot(ledger_manager, transaction_manager, net_worth_manager)
         elif choice == 'j': handle_journal(journal_manager)
         elif choice == 'w': handle_what_if_scenario(ledger_manager, transaction_manager)
+        elif choice == 'o': handle_ai_assistant_menu(ai_analyser, ledger_manager, transaction_manager)
 
         # --- System ---
         elif choice == 'q': break

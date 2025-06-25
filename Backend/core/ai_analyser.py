@@ -135,3 +135,27 @@ class FinancialAnalyser:
         
         else:
             return "Your data is in an usual state. Please add a debt or loan to provide context for your transactions."
+        
+    def answer_user_question(self, question: str, all_entries: list, all_transactions: list) -> str:
+        entries_text_block = "Current Debts and Loans:\n"
+        for entry in all_entries:
+            entries_text_block += f"- {entry.label}: ${entry.amount:,.2f}\n"
+
+        transactions_text_block = "Recent Transactions:\n"
+        for trans in all_transactions[:15]:
+            transactions_text_block += f"- {trans.label}: ${trans.amount:,.2f}\n"
+            
+        prompt = f"""<|system|>
+        You are an expert financial assistant. Your role is to answer the user's question based on the financial context provided. Be helpful, clear, and responsible. If the question is outside the scope of personal finance, politely decline to answer.</s>
+        <|user|>
+        Here is my current financial situation:
+        {entries_text_block}
+        {transactions_text_block}
+        Based on that context, please answer my question: "{question}"</s>
+        <|assistant|>
+        """
+            
+        return self._call_ai(prompt)
+
+
+

@@ -63,7 +63,3 @@ def export_data_to_csv(ledger_manager, transaction_manager):
             ]
 
             writer.writerow(row_data)
-
-
-
-    

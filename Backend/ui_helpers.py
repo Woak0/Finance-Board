@@ -8,6 +8,7 @@ from Backend.core.journal_manager import JournalManager
 from Backend.core.net_worth_manager import NetWorthManager
 from Backend.core.summary_calculator import *
 from Backend.utils.financial_algorithms import suggest_snowball_priority, calculate_what_if_eta
+from Backend.core.ai_analyser import FinancialAnalyser
 
 storage_manager = StorageManager()
 ledger_manager = LedgerManager()
@@ -448,3 +449,59 @@ def handle_what_if_scenario(ledger_manager: LedgerManager, transaction_manager: 
     
     eta_string = calculate_what_if_eta(ledger_manager.get_all_entries(), transaction_manager.get_all_transactions(), extra_payment)
     print(f"\nResult: {eta_string}")
+
+def handle_ai_chat(analyser: FinancialAnalyser, ledger_manager: LedgerManager, transaction_manager: TransactionManager):
+    """Manages the conversational chat loop with the AI assistant."""
+    print("\n--- AI Financial Chat ---")
+    print("Ask a question about your finances, or type 'exit' or 'c' to finish.")
+
+    all_entries = ledger_manager.get_all_entries()
+    all_transactions = transaction_manager.get_all_transactions()
+    
+    while True:
+        user_question = input("\nYou: ")
+        
+        if user_question.lower() in ['exit', 'c', 'quit']:
+            print("AI Assistant: Goodbye!")
+            break
+
+        ai_response = analyser.answer_user_question(user_question, all_entries, all_transactions)
+
+        print(f"\nAI Assistant: {ai_response}")
+
+
+def handle_ai_assistant_menu(analyser: FinancialAnalyser, ledger_manager: LedgerManager, transaction_manager: TransactionManager):
+    """Displays the AI sub-menu and routes to the correct AI function."""
+    
+    if not analyser.llm_pipeline:
+        print("\n--- AI Assistant is currently unavailable. ---")
+        print("Please check your internet connection and restart the application.")
+        return
+
+    while True:
+        print("\n--- AI Co-Pilot Assistant ---")
+        print("[1] Get Financial Health Check")
+        print("[2] Start a Chat with the AI")
+        print("[c] Return to Main Menu")
+        
+        choice = get_string_input("Select an AI tool")
+        if choice is None or choice.lower() == 'c':
+            break
+
+
+        if choice == '1':
+            all_entries = ledger_manager.get_all_entries()
+            all_transactions = transaction_manager.get_all_transactions()
+
+            insight_text = analyser.generate_insights(all_entries, all_transactions)
+
+            print("\n--- Your AI Health Check ---")
+            print(insight_text)
+            print("----------------------------")
+
+            input("\nPress Enter to continue...")
+
+        elif choice == '2':
+            handle_ai_chat(analyser, ledger_manager, transaction_manager)
+        else:
+            print("Invalid choice. Please select an option from the menu.")
