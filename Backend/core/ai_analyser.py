@@ -132,13 +132,23 @@ class FinancialAnalyser:
     def parse_command_to_json(self, command_str: str) -> dict:
         """Converts a user's natural language command into a structured JSON object."""
         today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-        system_prompt = f"""You are a hyper-precise data extraction model. Your ONLY function is to convert the user's command into a single, valid JSON object that strictly adheres to the provided schema.
+        system_prompt = f"""
+        You are a data extraction robot. Your ONLY job is to extract a list of financial action commands from the user's text. You MUST respond with a single JSON object containing a key "commands", which holds a list of action objects.
+
         **Core Directives:**
-        1.  **JSON ONLY:** Your entire response must be a single JSON object. Do not include any text before or after it, no explanations, no markdown ` ```json ` wrappers.
-        2. **ONE ACTION ONLY:** You must only identify and process the FIRST logical command in the user's input. Ignore any subsequent requests in the same line. For example, if the user says "Add a debt and then show me the summary", you must ONLY process "Add a debt".
-        3.  **Adhere to Schema:** The `action` key must be one of the allowed values. The `payload` must contain the relevant extracted fields.
+        1.  **JSON ONLY:** Your entire response must be a single JSON object.
+        2.  **Extract ALL Actions:** Identify all distinct financial actions in the user's command and create a separate action object for each.
+        3.  **Ignore Chatter:** Do not create action objects for conversational filler like "Can you please" or "thank you".
         4.  **Infer Types:** Correctly infer data types (e.g., convert "$1,200.50" to the number `1200.5`).
         5.  **Handle Ambiguity:** If a command is ambiguous or not a financial action, you MUST use `action: "unknown"`. Do not try to guess.
+        6.  **Adhere to Schema:** The `action` key must be one of the allowed values. The `payload` must contain the relevant extracted fields.
+
+        **Example:**
+        User: "add a $50 debt for groceries and then show me the summary"
+        JSON: {{"commands": [{{"action": "add_entry", "payload": {{"entry_type": "debt", "label": "groceries", "amount": 50.0}}}}, {{"action": "show_summary", "payload": {{}}}}]}}
+
+        User: "Can you please list my loans?"
+        JSON: {{"commands": [{{"action": "list", "payload": {{"filter_by_type": "loan"}}}}]}}
         
         **JSON Schema Definition:**
         ```typescript
