@@ -546,15 +546,19 @@ def handle_ai_command_bar(analyser: FinancialAnalyser, ledger_manager: LedgerMan
             payload = command.get("payload", {})
 
             if action == "add_entry":
-                label = get_string_input(f"Confirm label for new {payload.get('entry_type')}", default_value=payload.get('label'))
-                if label is None: continue
-                amount = get_positive_float_input(f"Confirm amount", default_value=str(payload.get('amount', '')))
-                if amount is None: continue
-                
-                print("AI suggested no tags for this entry.") 
-                comments = get_string_input("Enter comments (optional)", allow_empty=True)
-                
-                ledger_manager.add_entry(label=label, amount=amount, entry_type=payload.get('entry_type'), comments=comments, tags=payload.get('tags', []))
+                entry_type = payload.get('entry_type')
+                if entry_type in ["debt", "loan"]:
+                    label = get_string_input(f"Confirm label for new {entry_type}", default_value=payload.get('label'))
+                    if label is None: continue
+                    amount = get_positive_float_input(f"Confirm amount", default_value=str(payload.get('amount', '')))
+                    if amount is None: continue
+                    
+                    print("AI suggested no tags for this entry.") 
+                    comments = get_string_input("Enter comments (optional)", allow_empty=True)
+                    
+                    ledger_manager.add_entry(label=label, amount=amount, entry_type=entry_type, comments=comments, tags=payload.get('tags', []))
+                else:
+                    print(f"Skipping command: AI tried to create an entry with an invalid type ('{entry_type}'). An entry must be a 'debt' or 'loan'.")
 
             elif action == "add_transaction":
                 target_entry = _find_target_entry_with_disambiguation(ledger_manager, payload.get("target_entry_label"))
@@ -588,4 +592,3 @@ def handle_ai_command_bar(analyser: FinancialAnalyser, ledger_manager: LedgerMan
             else: 
                 reason = payload.get("reason", "I'm not sure how to do that.")
                 print(f"Skipping unknown step: {reason}")
-

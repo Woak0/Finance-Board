@@ -1,49 +1,49 @@
-from transformers import pipeline
-from Backend.core.ledger_manager import LedgerEntry
-from Backend.core.transaction_manager import Transaction
 from datetime import timezone, datetime
 import json
 import requests
-from dotenv import load_dotenv
-import os
 
-# --- Constants ---
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Using a highly capable free model
-MODEL_NAME = "deepseek/deepseek-coder-instruct" 
+from Backend.core.ledger_manager import LedgerEntry
+from Backend.core.transaction_manager import Transaction
+# We need our summary calculator to pre-process data for the AI
+from Backend.core.summary_calculator import calculate_balance_for_entry
 
 class FinancialAnalyser:
     def __init__(self, api_key: str | None):
         """Initialises the analyser with the provided API key."""
         self.api_key = api_key
+        # A dictionary to easily switch between models for different tasks
+        self.models = {
+            "parser": "mistralai/mistral-7b-instruct:free", # Fast and good for structured output
+            "analyst": "mistralai/mistral-7b-instruct:free", # More powerful for reasoning
+        }
         print("AI Analyser initialised.")
 
-    def _call_ai(self, system_prompt: str, user_prompt: str, is_json_mode: bool = False) -> str:
-        """Private helper to call the external AI API with a separated prompt."""
+    def _call_ai(self, system_prompt: str, user_prompt: str, model_key: str = "analyst", is_json_mode: bool = False) -> str:
+        """Private helper to call the external AI API with a separated prompt and specified model."""
         if not self.api_key:
             return "AI feature disabled. An API key from OpenRouter.ai is required."
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:3000",
+            "HTTP-Referer": "http://localhost:3000", # Can be any valid URL
             "X-Title": "Financial Co-Pilot",
         }
         
         data = {
-            "model": "mistralai/mistral-7b-instruct:free",
+            "model": self.models.get(model_key, self.models["analyst"]),
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
         }
-        # Conditionally add the JSON response format constraint
+        
         if is_json_mode:
             data["response_format"] = {"type": "json_object"}
 
         try:
-            print("Contacting AI assistant...")
-            response = requests.post(API_URL, headers=headers, json=data, timeout=90)
+            print(f"Contacting AI assistant (using model: {data['model']})...")
+            response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=90)
             response.raise_for_status()
             response_json = response.json()
             content = response_json['choices'][0]['message']['content']
@@ -53,100 +53,113 @@ class FinancialAnalyser:
         except (KeyError, IndexError):
             return "Error: Received an unexpected response format from the AI service."
 
-    def generate_insights(self, all_entries: list[LedgerEntry], all_transactions: list[Transaction]) -> str:
-        """Generates a financial health check report."""
+    def _create_financial_context_string(self, all_entries: list[LedgerEntry], all_transactions: list[Transaction]) -> str:
+        """Creates a detailed, readable string of the user's financial data for the AI."""
+        
+        context_parts = []
+        
+        # Calculate overall summary figures first
         debt_entries = [e for e in all_entries if e.entry_type == 'debt']
-        has_debts = bool(debt_entries)
-        has_transactions = bool(all_transactions)
+        loan_entries = [e for e in all_entries if e.entry_type == 'loan']
 
-        system_prompt = ""
-        user_prompt = ""
+        total_debt_balance = sum(calculate_balance_for_entry(d, all_transactions) for d in debt_entries)
+        total_loan_balance = sum(calculate_balance_for_entry(l, all_transactions) for l in loan_entries)
+        
+        context_parts.append(f"### Overall Financial Snapshot\n- Total Debt Owed: ${total_debt_balance:,.2f}\n- Total Owed to You (Loans): ${total_loan_balance:,.2f}\n")
 
-        if has_debts and has_transactions:
-            system_prompt = """
-            You are a professional, encouraging, and detail-oriented financial analyst based in Australia. Your primary directive is to analyse the user's financial data and provide a concise, structured 'Financial Health Check'.
+        # Detail individual entries
+        if all_entries:
+            context_parts.append("### Detailed Ledger Entries")
+            for entry in sorted(all_entries, key=lambda e: (e.entry_type, e.label)):
+                balance = calculate_balance_for_entry(entry, all_transactions)
+                # Only show active entries with a positive balance unless there are none
+                if balance > 0.01:
+                    context_parts.append(f"- **{entry.label}** ({entry.entry_type.capitalize()}, Status: {entry.status.capitalize()})\n  - Original Amount: ${entry.amount:,.2f}\n  - Current Balance: ${balance:,.2f}")
+        
+        # Detail recent transactions
+        if all_transactions:
+            context_parts.append("\n### Recent Transactions (last 10)")
+            for t in sorted(all_transactions, key=lambda t: t.date_paid, reverse=True)[:10]:
+                 context_parts.append(f"- {t.date_paid.strftime('%Y-%m-%d')}: {t.label} (${t.amount:,.2f})")
+                 
+        return "\n".join(context_parts)
 
-            **Core Directives:**
-            1.  **NEVER Invent Data:** You must base your entire analysis STRICTLY on the data provided in the user's context. Do not invent numbers, trends, or transactions.
-            2.  **Strict Structure:** Your response MUST follow this exact three-part structure, using these exact Markdown headers:
-                ### Financial Summary
-                ### Key Observation
-                ### Actionable Suggestion
-            3.  **Tone:** Maintain a positive and empowering tone. Frame suggestions as opportunities for growth.
-            4.  **Conciseness:** Keep the entire response under 200 words.
-            5. **NEVER Recommend Specific Products:** Do not mention any specific brand names, financial products, or third-party applications (e.g., Mint, YNAB, specific banks, etc.). Your advice must be generic.
-            """
-            entries_text_block = "Current Active Debts:\n" + "\n".join([f"- {e.label}: ${e.amount:,.2f}" for e in debt_entries if e.status == 'active'])
-            transactions_text_block = "\nRecent Transactions:\n" + "\n".join([f"- {t.date_paid.strftime('%Y-%m-%d')}, {t.label}: ${t.amount:,.2f}" for t in sorted(all_transactions, key=lambda t: t.date_paid, reverse=True)[:15]])
-            user_prompt = f"Here is my financial data:\n{entries_text_block}\n{transactions_text_block}\nPlease provide your analysis."
-
-        elif has_debts and not has_transactions:
-            entries_text_block = "Current Debts:\n" + "\n".join([f"- {e.label}: ${e.amount:,.2f}" for e in debt_entries])
-            system_prompt = """
-            You are a motivational financial coach from Australia. The user has taken the courageous first step of listing their debts but feels overwhelmed and hasn't started making payments. Your task is to provide a clear, simple, and encouraging action plan.
-
-            **Core Directives:**
-            1.  **Acknowledge and Praise:** Start by congratulating the user on tracking their finances, framing it as the most important step.
-            2.  **Introduce the "Debt Snowball":** Simply and clearly explain the concept of focusing all extra effort on the smallest debt first to create a quick win and build psychological momentum.
-            3.  **Provide a Clear Call to Action:** End by encouraging them to make one small payment towards their smallest debt today, emphasizing that starting is more important than the amount.
-            4. **NEVER Recommend Specific Products:** Do not mention any specific brand names, financial products, or third-party applications (e.g., Mint, YNAB, specific banks, etc.). Your advice must be generic.
-            """
-            user_prompt = f"I have these debts but haven't started paying:\n{entries_text_block}\nWhat's a good way to start?"
-
-        else:
+    def generate_insights(self, all_entries: list[LedgerEntry], all_transactions: list[Transaction]) -> str:
+        """Generates a financial health check report using a much better context."""
+        
+        if not all_entries and not all_transactions:
             system_prompt = """
             You are a friendly and knowledgeable financial guide from Australia. A new user is starting their financial journey from scratch. Your goal is to provide three simple, powerful, and universally applicable tips to set them up for success.
 
             **Core Directives:**
             1.  **Welcoming Tone:** Start with a warm welcome.
             2.  **Three-Point Structure:** Present your advice in a clear, numbered list.
-            3.  **NEVER Recommend Specific Products:** Do not mention any specific brand names, financial products, or third-party applications (e.g., Mint, YNAB, specific banks, etc.). Your advice must be generic.
-            4.  **The Tips:** The three tips must cover:
-                1.  A simple budgeting rule (like the 50/30/20 rule).
-                2.  The concept and importance of a small emergency fund.
-                3.  The power of consistent tracking (mentioning this app).
+            3.  **NEVER Recommend Specific Products:** Your advice must be generic.
+            4.  **The Tips:** The three tips must cover: (1) A simple budgeting rule, (2) The importance of an emergency fund, and (3) The power of consistent tracking.
             """
-
             user_prompt = "I'm new here and want to get better with my finances. What are the first things I should know?"
+            return self._call_ai(system_prompt, user_prompt)
+
+        # For all other cases, we now use the rich context string
+        system_prompt = """
+        You are a professional, encouraging, and detail-oriented financial analyst based in Australia. Your primary directive is to analyze the user's financial data and provide a concise, structured 'Financial Health Check'.
+
+        **Core Directives:**
+        1.  **NEVER Invent Data:** Base your entire analysis STRICTLY on the data provided in the user's context.
+        2.  **Strict Structure:** Your response MUST follow this exact three-part structure, using these exact Markdown headers:
+            ### Financial Summary
+            ### Key Observation
+            ### Actionable Suggestion
+        3.  **Tone:** Maintain a positive and empowering tone. Frame suggestions as opportunities for growth.
+        4.  **Conciseness:** Keep the entire response under 200 words.
+        5.  **NEVER Recommend Specific Products:** Do not mention any specific brand names, financial products, or third-party applications. Your advice must be generic.
+        """
+        context_string = self._create_financial_context_string(all_entries, all_transactions)
+        user_prompt = f"Here is my financial data. Please provide your analysis.\n\n{context_string}"
             
         return self._call_ai(system_prompt, user_prompt)
 
     def answer_user_question(self, question: str, all_entries: list[LedgerEntry], all_transactions: list[Transaction]) -> str:
-        """Answers a specific user question with their financial data as context."""
-        entries_text_block = "Current Debts & Loans:\n" + "\n".join([f"- {e.label}: ${e.amount:,.2f}" for e in all_entries])
-        transactions_text_block = "Recent Transactions:\n" + "\n".join([f"- {t.label}: ${t.amount:,.2f}" for t in all_transactions[:15]])
-        system_prompt = """ 
-        You are an expert financial Q&A assistant from Australia. You have one primary directive.
-        **THE GOLDEN RULE:** You MUST answer the user's question based ONLY on the "Current Financial Context" provided.
-        - If the context contains the information, use it to form your answer.
-        - If the context is empty or does not contain the information needed, you MUST respond with ONLY the phrase: "Based on the data you've provided, I don't have enough information to answer that question."
-        - DO NOT, under any circumstances, invent, create, or assume any numbers, figures, or scenarios. You are a data-driven assistant, not a creative storyteller.
-        - If the question is clearly off-topic (e.g., medical advice, personal identity, politics, harmful content), respond with ONLY the phrase: "I can only answer questions related to personal finance.
+        """Answers a specific user question with their financial data as context. Now much smarter."""
+        
+        system_prompt = """
+        You are an expert financial Q&A assistant from Australia. Your primary goal is to be helpful and accurate.
 
-        **NEVER Recommend Specific Products:** Do not mention any specific brand names, financial products, or third-party applications (e.g., Mint, YNAB, specific banks, etc.). Your advice must be generic.
+        **Core Directives:**
+        1.  **Answer from Context:** You MUST answer the user's question based ONLY on the "Current Financial Context" provided. This context includes pre-calculated totals.
+        2.  **Perform Simple Math:** You are allowed and encouraged to perform simple calculations (like summing or comparing numbers) based on the provided data to answer the user's question fully. For example, if asked for total debt, use the "Total Debt Owed" figure.
+        3.  **Acknowledge Limits:** If the provided data truly does not contain the information needed to answer (e.g., asking about stock prices), you MUST respond with: "Based on the data you've provided, I don't have enough information to answer that question." DO NOT invent data.
+        4.  **Stay On Topic:** If the question is clearly off-topic (e.g., medical advice, politics), respond with: "I can only answer questions related to personal finance."
+        5.  **NEVER Recommend Specific Products:** Your advice must be generic. Do not mention any brand names.
         """
-
-        user_prompt = f"Here is my financial situation:\n{entries_text_block}\n{transactions_text_block}\n\nMy question is: \"{question}\""
+        
+        context_string = self._create_financial_context_string(all_entries, all_transactions)
+        user_prompt = f"**Current Financial Context:**\n{context_string}\n\n**My question is:** \"{question}\""
+        
         return self._call_ai(system_prompt, user_prompt)
 
     def parse_command_to_json(self, command_str: str) -> dict:
         """Converts a user's natural language command into a structured JSON object."""
-        today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         system_prompt = f"""
         You are a data extraction robot. Your ONLY job is to extract a list of financial action commands from the user's text. You MUST respond with a single JSON object containing a key "commands", which holds a list of action objects.
-
+    
         **Core Directives:**
-        1.  **JSON ONLY:** Your entire response must be a single JSON object.
-        2.  **Extract ALL Actions:** Identify all distinct financial actions in the user's command and create a separate action object for each.
-        3.  **Ignore Chatter:** Do not create action objects for conversational filler like "Can you please" or "thank you".
-        4.  **Infer Types:** Correctly infer data types (e.g., convert "$1,200.50" to the number `1200.5`).
-        5.  **Handle Ambiguity:** If a command is ambiguous or not a financial action, you MUST use `action: "unknown"`. Do not try to guess.
-        6.  **Adhere to Schema:** The `action` key must be one of the allowed values. The `payload` must contain the relevant extracted fields.
+        1.  **JSON ONLY:** Your entire response must be a single, valid JSON object.
+        2.  **Distinguish Actions:** It is critical to distinguish between adding an 'entry' and adding a 'transaction'.
+            - Use `action: "add_entry"` ONLY for creating a brand new debt or loan.
+            - Use `action: "add_transaction"` for recording a payment or repayment against an EXISTING entry.
+        3.  **Adhere to Schema:** The `action` key and `payload` must follow the provided schema.
+        4.  **Handle Ambiguity:** If a command is ambiguous or not a financial action, you MUST use `action: "unknown"`. Do not guess.
 
-        **Example:**
-        User: "add a $50 debt for groceries and then show me the summary"
-        JSON: {{"commands": [{{"action": "add_entry", "payload": {{"entry_type": "debt", "label": "groceries", "amount": 50.0}}}}, {{"action": "show_summary", "payload": {{}}}}]}}
-
+        **Example 1 (New Debt):**
+        User: "add a $50 debt for groceries"
+        JSON: {{"commands": [{{"action": "add_entry", "payload": {{"entry_type": "debt", "label": "groceries", "amount": 50.0}}}}]}}
+    
+        **Example 2 (Repayment on Existing Loan):**
+        User: "I received a $100 repayment for the money I lent to John"
+        JSON: {{"commands": [{{"action": "add_transaction", "payload": {{"transaction_type": "repayment", "target_entry_label": "money I lent to John", "amount": 100.0}}}}]}}
+    
+        **Example 3 (List Loans):**
         User: "Can you please list my loans?"
         JSON: {{"commands": [{{"action": "list", "payload": {{"filter_by_type": "loan"}}}}]}}
         
@@ -157,37 +170,23 @@ class FinancialAnalyser:
           "payload": {{
             // for add_entry
             "entry_type"?: "debt" | "loan",
-            "label"?: string,
-            "amount"?: number,
-            "tags"?: string[],
-            "comments"?: string,
             
             // for add_transaction
             "transaction_type"?: "payment" | "repayment",
-            "target_entry_label"?: string,
+            "target_entry_label"?: string, // CRITICAL for transactions
             
-            // for list
-            "filter_by_type"?: "debt" | "loan" | "all",
-            
-            // for delete
-            // uses target_entry_label
-            
-            // for show_summary
-            "focus"?: "debt_balance" | "all",
-            
-            // for unknown
-            "reason"?: string
+            // other fields
+            "label"?: string,
+            "amount"?: number
           }}
         }}"""
                 
         user_prompt = f"Convert this command to JSON: \"{command_str}\""
-
-        ai_response_str = self._call_ai(system_prompt, user_prompt, is_json_mode=True)
+    
+        # Use the faster model for this structured task
+        ai_response_str = self._call_ai(system_prompt, user_prompt, model_key="parser", is_json_mode=True)
         try:
             return json.loads(ai_response_str)
         except json.JSONDecodeError:
             print(f"DEBUG: AI returned non-JSON response: {ai_response_str}")
-            return {"action": "unknown", "payload": {"reason": "AI failed to generate a valid command."}}
-
-
-
+            return {"commands": [{"action": "unknown", "payload": {"reason": "AI failed to generate a valid command."}}]}
