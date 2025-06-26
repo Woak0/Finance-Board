@@ -59,40 +59,27 @@ def _handle_get_tags(tag_manager: TagManager) -> list[str] | None:
     
     return list(set(final_tags))
 
-def handle_add_entry(ledger_manager: LedgerManager, tag_manager: TagManager, entry_type: str):
-    """Handles the UI flow for adding a new debt or loan."""
+def handle_add_entry(ledger_manager: LedgerManager, tag_manager: TagManager, entry_type: str, label=None, amount=None, tags=None, comments=None):
+    """Handles the UI flow for adding a new debt or loan, can be pre-filled."""
     print(f"\n--- Add New {entry_type.capitalize()} ---")
     
-    label = get_string_input(f"Enter {entry_type} name")
-    if label is None: return
+    if label is None:
+        label = get_string_input(f"Enter {entry_type} name")
+        if label is None: return
 
-    amount = get_positive_float_input("Enter a positive amount")
-    if amount is None: return
+    if amount is None:
+        amount = get_positive_float_input("Enter a positive amount")
+        if amount is None: return
     
-    print("\n--- Select Standard Tags ---")
-    standard_tags = tag_manager.get_standard_tags()
-    for i, tag in enumerate(standard_tags): print(f"  [{i+1}] {tag}")
+    if tags is None:
+        tags = _handle_get_tags(tag_manager)
+        if tags is None: return
     
-    tag_nums_str = get_string_input("Enter tag numbers, comma-separated (optional)", allow_empty=True)
-    final_tags = []
-    if tag_nums_str is not None:
-        for num_str in tag_nums_str.split(','):
-            try:
-                num = int(num_str.strip())
-                if 1 <= num <= len(standard_tags):
-                    final_tags.append(standard_tags[num - 1])
-            except ValueError:
-                pass
-    
-    custom_tags_str = get_string_input("Enter custom tags, comma-separated (optional)", allow_empty=True)
-    if custom_tags_str:
-        custom_tags = [tag.strip() for tag in custom_tags_str.split(',')]
-        final_tags.extend([f"other:{tag}" for tag in custom_tags if tag])
+    if comments is None:
+        comments = get_string_input("Enter comments (optional)", allow_empty=True)
+        if comments is None: return
 
-    comments = get_string_input("Enter comments (optional)", allow_empty=True)
-    if comments is None: return
-
-    ledger_manager.add_entry(label=label, amount=amount, entry_type=entry_type, comments=comments, tags=list(set(final_tags)))
+    ledger_manager.add_entry(label=label, amount=amount, entry_type=entry_type, comments=comments, tags=tags)
 
 def handle_add_transaction(ledger_manager: LedgerManager, transaction_manager: TransactionManager, tag_manager: TagManager, transaction_type: str):
     """Handles adding a payment to a debt or a repayment for a loan."""
@@ -469,39 +456,125 @@ def handle_ai_chat(analyser: FinancialAnalyser, ledger_manager: LedgerManager, t
 
         print(f"\nAI Assistant: {ai_response}")
 
+def _find_target_entry_with_disambiguation(ledger_manager: LedgerManager, target_label_guess: str) -> LedgerEntry | None:
+    """
+    Finds a target entry using a more robust, word-based fuzzy search.
+    """
+    if not target_label_guess:
+        print("I need a target for that command (e.g., 'car loan', 'rent').")
+        return None
+    
+    search_words = set(target_label_guess.lower().split())
+
+    possible_targets = []
+    all_active_entries = [e for e in ledger_manager.get_all_entries() if e.status == 'active']
+
+    for entry in all_active_entries:
+        entry_words = set(entry.label.lower().split())
+        
+        if search_words.intersection(entry_words):
+            possible_targets.append(entry)
+
+    if len(possible_targets) == 0:
+        print(f"Sorry, I couldn't find any active entry related to '{target_label_guess}'.")
+        return None
+    elif len(possible_targets) == 1:
+        return possible_targets[0]
+    else:
+        print(f"I found a few possible entries for '{target_label_guess}'. Which one did you mean?")
+
 
 def handle_ai_assistant_menu(analyser: FinancialAnalyser, ledger_manager: LedgerManager, transaction_manager: TransactionManager):
     """Displays the AI sub-menu and routes to the correct AI function."""
-    
-    if not analyser.llm_pipeline:
-        print("\n--- AI Assistant is currently unavailable. ---")
-        print("Please check your internet connection and restart the application.")
-        return
 
     while True:
         print("\n--- AI Co-Pilot Assistant ---")
         print("[1] Get Financial Health Check")
         print("[2] Start a Chat with the AI")
+        print("[3] Use AI Command Bar")
         print("[c] Return to Main Menu")
         
         choice = get_string_input("Select an AI tool")
         if choice is None or choice.lower() == 'c':
             break
 
-
         if choice == '1':
-            all_entries = ledger_manager.get_all_entries()
-            all_transactions = transaction_manager.get_all_transactions()
-
-            insight_text = analyser.generate_insights(all_entries, all_transactions)
-
-            print("\n--- Your AI Health Check ---")
-            print(insight_text)
-            print("----------------------------")
-
+            insight_text = analyser.generate_insights(ledger_manager.get_all_entries(), transaction_manager.get_all_transactions())
+            print("\n--- Your AI Health Check ---"); print(insight_text); print("----------------------------")
             input("\nPress Enter to continue...")
-
         elif choice == '2':
             handle_ai_chat(analyser, ledger_manager, transaction_manager)
+        elif choice == '3':
+            handle_ai_command_bar(analyser, ledger_manager, transaction_manager, tag_manager)
         else:
-            print("Invalid choice. Please select an option from the menu.")
+            print("Invalid choice.")
+
+def handle_ai_command_bar(analyser: FinancialAnalyser, ledger_manager: LedgerManager, transaction_manager: TransactionManager, tag_manager: TagManager):
+    """Handles the AI command bar loop, with fuzzy search and disambiguation."""
+    print("\n--- AI Command Bar ---")
+    print("Type your command (e.g., 'add debt for groceries, $50') or 'exit' to finish.")
+
+    while True:
+        command_str = input("\nAI Command > ")
+        if command_str.lower() in ['exit', 'quit', 'c']: break
+        if not command_str.strip(): continue
+
+        parsed_command = analyser.parse_command_to_json(command_str)
+        action = parsed_command.get("action")
+        payload = parsed_command.get("payload", {})
+        
+        if action == "add_entry":
+            # Extract details from the payload
+            payload_label = payload.get("label")
+            payload_amount = payload.get("amount")
+            payload_tags = payload.get("tags")
+            payload_comments = payload.get("comments")
+            entry_type = payload.get("entry_type", "debt")
+        
+            handle_add_entry(
+                ledger_manager, 
+                tag_manager, 
+                entry_type, 
+                label=payload_label, 
+                amount=payload_amount,
+                tags=payload_tags,
+                comments=payload_comments
+            )
+
+        elif action == "add_transaction":
+            target_entry = _find_target_entry_with_disambiguation(ledger_manager, payload.get("target_entry_label"))
+            if target_entry:
+                amount = float(payload.get("amount", 0))
+                if amount > 0:
+                    trans_type = payload.get("transaction_type", "payment")
+                    label = payload.get("label", f"{trans_type.capitalize()} for {target_entry.label}")
+                    transaction_manager.add_transaction(target_entry.id, amount, trans_type, label)
+                    update_entry_status(target_entry, transaction_manager)
+                else:
+                    print("Error: Transaction amount must be positive.")
+
+        elif action == "list":
+            handle_list_all(ledger_manager, transaction_manager)
+
+        elif action == "show_summary":
+            handle_show_summary(ledger_manager, transaction_manager)
+
+        elif action == "delete_entry":
+            target_entry = _find_target_entry_with_disambiguation(ledger_manager, payload.get("target_entry_label"))
+            if target_entry:
+                confirm = get_string_input(f"Are you sure you want to delete '{target_entry.label}'? Type 'yes' to confirm")
+                if confirm and confirm.lower() == 'yes':
+                    ledger_manager.delete_entry_by_id(target_entry.id)
+                    transaction_manager.delete_transactions_by_entry_id(target_entry.id)
+                    print(f"'{target_entry.label}' has been deleted.")
+                else:
+                    print("Deletion cancelled.")
+        
+        elif action == "get_ai_insight":
+            insight_text = analyser.generate_insights(ledger_manager.get_all_entries(), transaction_manager.get_all_transactions())
+            print("\n--- AI Health Check ---\n" + insight_text)
+
+        else: 
+            reason = payload.get("reason", "I'm not sure how to do that.")
+            print(f"Sorry, I couldn't process that command. {reason}")
+

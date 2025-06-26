@@ -7,8 +7,28 @@ from Backend.core.net_worth_manager import NetWorthSnapshot, NetWorthManager
 from Backend.core.ai_analyser import FinancialAnalyser
 from Backend.ui_helpers import *
 from Backend.utils.validators import *
+from Backend.core.config_manager import load_config, save_config
 
 def main():
+    # --- First-Time Setup for API Key ---
+    config = load_config()
+    api_key = config.get("OPENROUTER_API_KEY")
+
+    if not api_key:
+        print("\n--- First-Time AI Setup ---")
+        print("To enable AI features, you need a free API key from OpenRouter.ai.")
+        user_key_input = input("Please paste your key now, or press Enter to skip: ")
+        
+        if user_key_input.strip():
+            api_key = user_key_input.strip()
+            config["OPENROUTER_API_KEY"] = api_key
+            save_config(config)
+            print("API Key saved! AI features are now enabled.")
+        else:
+            print("Setup skipped. AI features will be disabled.")
+            config["OPENROUTER_API_KEY"] = None
+            save_config(config)
+
     # --- Startup ---
     storage_manager = StorageManager()
     ledger_manager = LedgerManager()
@@ -16,7 +36,7 @@ def main():
     tag_manager = TagManager()
     journal_manager = JournalManager()
     net_worth_manager = NetWorthManager()
-    ai_analyser = FinancialAnalyser()
+    ai_analyser = FinancialAnalyser(api_key=api_key)
 
     # Hydrate data from file
     all_data = storage_manager.load_data()
