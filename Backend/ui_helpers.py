@@ -529,6 +529,20 @@ def handle_ai_command_bar(analyser: FinancialAnalyser, ledger_manager: LedgerMan
             print("Sorry, I didn't find any specific financial commands in your request.")
             continue
 
+        is_plan_valid = True
+        for command in commands_list:
+            action = command.get("action")
+            payload = command.get("payload", {})
+
+            if action == "add_transaction" and not payload.get("target_entry_label"):
+                print("Error: The AI understood you want to make a transaction, but couldn't identify which debt or loan to apply it to.")
+                print("Please be more specific, e.g., '...repayment on my friend loan'.")
+                is_plan_valid = False
+                break
+
+        if not is_plan_valid:
+            continue
+
         print("\n--- AI Understood the Following Plan ---")
         for i, command in enumerate(commands_list):
             action = command.get("action", "unknown")
