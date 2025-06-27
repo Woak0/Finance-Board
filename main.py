@@ -1,4 +1,4 @@
-from Frontend.GUI import MainWindow
+from Frontend.gui import MainWindow
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLayout
 import sys
 
