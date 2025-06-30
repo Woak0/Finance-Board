@@ -62,3 +62,15 @@ python -m venv venv
 
 # Install the required packages
 pip install -r requirements.txt
+
+# To run the Application use the following:
+python main.py
+
+# Building the executable
+1. Make sure you have an icon.ico file in the assets/ directory
+2. Run the build script:
+.\build.bat
+
+3. This will create the dist/FinanceBoard folder.
+4. To create the final setup.exe, use the inno setup tool and follow the steps in the wizard.
+
