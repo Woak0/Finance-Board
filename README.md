@@ -73,4 +73,5 @@ python main.py
 
 3. This will create the dist/FinanceBoard folder.
 4. To create the final setup.exe, use the inno setup tool and follow the steps in the wizard.
+```
 
