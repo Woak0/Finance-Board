@@ -40,3 +40,14 @@ class JournalManager:
 
     def get_all_entries(self) -> list[JournalEntry]:
         return sorted(self.entries, key=lambda e: e.date_created, reverse=True)
+    
+    def delete_entry_by_id(self, entry_id: str):
+        """
+        Removes a journal entry from the list by its ID.
+        """
+        initial_count = len(self.entries)
+        self.entries = [e for e in self.entries if e.id != entry_id]
+        if len(self.entries) < initial_count:
+            print(f"Deleted journal entry with ID: {entry_id}")
+        else:
+            print(f"Warning: Could not find journal entry with ID {entry_id} to delete.")

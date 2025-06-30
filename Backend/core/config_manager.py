@@ -3,7 +3,7 @@ import json
 
 def get_config_path() -> str:
     """Returns the platform-specific path for the config file."""
-    app_name = "FinancialCoPilot"
+    app_name = "Finance Board"
     if os.name == 'nt': 
         return os.path.join(os.getenv('APPDATA'), app_name)
     else:
