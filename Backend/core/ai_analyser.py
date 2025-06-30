@@ -4,17 +4,15 @@ import requests
 
 from Backend.core.ledger_manager import LedgerEntry
 from Backend.core.transaction_manager import Transaction
-# We need our summary calculator to pre-process data for the AI
 from Backend.core.summary_calculator import calculate_balance_for_entry
 
 class FinancialAnalyser:
     def __init__(self, api_key: str | None):
         """Initialises the analyser with the provided API key."""
         self.api_key = api_key
-        # A dictionary to easily switch between models for different tasks
         self.models = {
-            "parser": "mistralai/mistral-7b-instruct:free", # Fast and good for structured output
-            "analyst": "mistralai/mistral-7b-instruct:free", # More powerful for reasoning
+            "parser": "mistralai/mistral-7b-instruct:free", 
+            "analyst": "mistralai/mistral-7b-instruct:free", 
         }
         print("AI Analyser initialised.")
 
@@ -26,7 +24,7 @@ class FinancialAnalyser:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:3000", # Can be any valid URL
+            "HTTP-Referer": "http://localhost:3000", 
             "X-Title": "Financial Co-Pilot",
         }
         
@@ -58,7 +56,6 @@ class FinancialAnalyser:
         
         context_parts = []
         
-        # Calculate overall summary figures first
         debt_entries = [e for e in all_entries if e.entry_type == 'debt']
         loan_entries = [e for e in all_entries if e.entry_type == 'loan']
 
@@ -67,16 +64,13 @@ class FinancialAnalyser:
         
         context_parts.append(f"### Overall Financial Snapshot\n- Total Debt Owed: ${total_debt_balance:,.2f}\n- Total Owed to You (Loans): ${total_loan_balance:,.2f}\n")
 
-        # Detail individual entries
         if all_entries:
             context_parts.append("### Detailed Ledger Entries")
             for entry in sorted(all_entries, key=lambda e: (e.entry_type, e.label)):
                 balance = calculate_balance_for_entry(entry, all_transactions)
-                # Only show active entries with a positive balance unless there are none
                 if balance > 0.01:
                     context_parts.append(f"- **{entry.label}** ({entry.entry_type.capitalize()}, Status: {entry.status.capitalize()})\n  - Original Amount: ${entry.amount:,.2f}\n  - Current Balance: ${balance:,.2f}")
         
-        # Detail recent transactions
         if all_transactions:
             context_parts.append("\n### Recent Transactions (last 10)")
             for t in sorted(all_transactions, key=lambda t: t.date_paid, reverse=True)[:10]:
@@ -100,7 +94,6 @@ class FinancialAnalyser:
             user_prompt = "I'm new here and want to get better with my finances. What are the first things I should know?"
             return self._call_ai(system_prompt, user_prompt)
 
-        # For all other cases, we now use the rich context string
         system_prompt = """
         You are a professional, encouraging, and detail-oriented financial analyst based in Australia. Your primary directive is to analyze the user's financial data and provide a concise, structured 'Financial Health Check'.
 
@@ -183,7 +176,6 @@ class FinancialAnalyser:
                 
         user_prompt = f"Convert this command to JSON: \"{command_str}\""
     
-        # Use the faster model for this structured task
         ai_response_str = self._call_ai(system_prompt, user_prompt, model_key="parser", is_json_mode=True)
         try:
             return json.loads(ai_response_str)

@@ -37,8 +37,7 @@ def main():
     journal_manager = JournalManager()
     net_worth_manager = NetWorthManager()
     ai_analyser = FinancialAnalyser(api_key=api_key)
-
-    # Hydrate data from file
+    
     all_data = storage_manager.load_data()
     ledger_manager.entries = [LedgerEntry.from_dict(d) for d in all_data["ledger_entries"]]
     transaction_manager.transactions = [Transaction.from_dict(t) for t in all_data["transactions"]]

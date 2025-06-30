@@ -1,30 +1,20 @@
 # JetBrains/VS Code IDE specific
-# =================================================================
 .idea/
 .vscode/*
 !.vscode/settings.json
 !.vscode/launch.json
 
-
-# =================================================================
 # Python bytecode and compiled files
-# =================================================================
 __pycache__/
 *.py[cod]
 *$py.class
 
-
-# =================================================================
 # Build and distribution artifacts
-# =================================================================
 /build/
 /dist/
 *.spec
 
-
-# =================================================================
 # Virtual Environments
-# =================================================================
 .env
 .venv
 env/
@@ -33,10 +23,7 @@ ENV/
 env.bak/
 venv.bak/
 
-
-# =================================================================
 # Project Specific Files to Ignore
-# =================================================================
 
 # The user's local data file. This should NEVER be committed.
 Backend/data/
@@ -47,10 +34,7 @@ Backend/data/
 # Log files
 *.log
 
-
-# =================================================================
 # Python Packaging & Installation Directories
-# =================================================================
 develop-eggs/
 eggs/
 .eggs/
