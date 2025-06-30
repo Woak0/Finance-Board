@@ -1,6 +1,8 @@
 A modern, open-source desktop application for Windows to manage personal debts, loans, and finances with powerful tracking and analysis tools, including AI-powered insights.
 
-## ✅ Key Features
+**System Requirement:** This application is built for **Windows 10 and Windows 11**
+
+## Key Features
 
 - **Comprehensive Ledger:** Full CRUD (Create, Read, Update, Delete) support for all debts and loans.
 
@@ -45,7 +47,7 @@ That's it! The application will be installed on your computer, complete with Sta
 
 ---
 
-## 👨‍💻 For Developers: Building from Source
+## For Developers: Building from Source
 
 If you'd like to run the application from the source code or contribute to the project, follow these steps.
 
