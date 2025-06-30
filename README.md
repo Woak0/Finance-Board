@@ -40,7 +40,7 @@ A modern, open-source desktop application for Windows to manage personal debts, 
 Getting started is easy. No need to install Python or any dependencies.
 
 1.  Go to the [**Releases Page**](https://github.com/Woak0/Finance-Board/releases/latest).
-2.  Under the "Assets" section of the latest release, download the `FinanceBoard-1.0.1-setup.exe` file.
+2.  Under the "Assets" section of the latest release, download the `FinanceBoard-1.0.2-setup.exe` file.
 3.  Run the downloaded installer and follow the on-screen instructions.
 
 That's it! The application will be installed on your computer, complete with Start Menu and desktop shortcuts.
