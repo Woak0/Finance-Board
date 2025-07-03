@@ -95,6 +95,17 @@ class TransactionManager:
         return self.transactions
     
     def delete_transactions_by_entry_id(self, transaction_id_to_delete: str):
+        """
+        Deletes all transactions related to a parent entry.
+        """
         transactions_to_keep = [transaction for transaction in self.transactions if transaction.entry_id != transaction_id_to_delete]
         self.transactions = transactions_to_keep
         return self.transactions
+    
+    def delete_transaction_by_id(self, transaction_id_to_delete: str):
+        """Removes a single transaction from the list by its own ID."""
+        
+        initial_count = len(self.transactions)
+        self.transactions = [t for t in self.transactions if t.id != transaction_id_to_delete]
+        if len(self.transactions) < initial_count:
+            print(f"Deleted transaction with ID: {transaction_id_to_delete}")
