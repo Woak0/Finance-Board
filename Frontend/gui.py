@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
 
-# Import all necessary backend components
 from Backend.core.ledger_manager import LedgerManager, LedgerEntry
 from Backend.core.transaction_manager import TransactionManager, Transaction
 from Backend.core.journal_manager import JournalManager
@@ -19,7 +18,7 @@ from Backend.utils.financial_algorithms import *
 from Backend.core.config_manager import save_config
 from Backend.core.ai_analyser import FinancialAnalyser
 
-# --- DIALOGS (Unchanged) ---
+# --- DIALOGS ---
 class ApiKeyDialog(QDialog):
     """A dialog for the user to enter their OpenRouter.ai API key."""
     def __init__(self, current_key="", parent=None):
@@ -108,7 +107,6 @@ class EntryDialog(QDialog):
                 self.tags_list_widget.addItem(item)
                 item.setSelected(True)
         
-        # Dialog buttons
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
@@ -209,7 +207,7 @@ class AiChatDialog(QDialog):
         
         self.add_message("You", question)
         self.input_line.clear()
-        QApplication.processEvents() # Allow UI to update
+        QApplication.processEvents()
         
         response = self.ai_analyser.answer_user_question(
             question,
@@ -279,7 +277,6 @@ class AiPlanEditorDialog(QDialog):
         elif cmd['action'] == 'add_transaction':
             dialog = TransactionDialog(transaction_data=cmd['payload'], parent=self)
             if dialog.exec():
-                # Preserve keys the dialog doesn't know about (e.g., target_entry_label)
                 self.commands[row]['payload'].update(dialog.transaction_data)
                 self.refresh_list()
         else:
@@ -322,7 +319,6 @@ class MainWindow(QMainWindow):
     def __init__(self, **managers):
         super().__init__()
         
-        # Assign all manager instances to the main window
         for name, instance in managers.items():
             setattr(self, name, instance)
 
@@ -348,7 +344,6 @@ class MainWindow(QMainWindow):
         menu_bar = self.menuBar()
         s = self.style()
         
-        # File Menu
         file_menu = menu_bar.addMenu("File")
         save_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)), "Save", self)
         save_action.setShortcut(QKeySequence.StandardKey.Save)
@@ -366,7 +361,6 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(clear_action)
 
-        # Tools Menu
         tools_menu = menu_bar.addMenu("Tools")
         snowball_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward)), "Debt Payoff Strategy", self)
         snowball_action.triggered.connect(self.show_debt_snowball)
@@ -378,7 +372,6 @@ class MainWindow(QMainWindow):
         tools_menu.addAction(whatif_action)
         tools_menu.addAction(networth_action)
 
-        # AI Tools Menu
         ai_menu = menu_bar.addMenu("AI Tools")
         health_check_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)), "Get Financial Health Check", self)
         health_check_action.triggered.connect(self.run_ai_health_check)
@@ -408,7 +401,6 @@ class MainWindow(QMainWindow):
         grid_layout = QGridLayout()
         main_layout.addLayout(grid_layout)
 
-        # Summary Panel
         summary_container = QWidget()
         summary_layout = QFormLayout(summary_container)
         self.summary_labels = {
@@ -434,16 +426,14 @@ class MainWindow(QMainWindow):
         summary_layout.addRow(QLabel("---"))
         summary_layout.addRow("<h2>Net Financial Position:</h2>", self.summary_labels['net_position'])
 
-        # Chart Canvases
         self.pie_chart_canvas = self.create_pie_chart()
         self.bar_chart_canvas = self.create_bar_chart()
         self.line_chart_canvas = self.create_line_chart()
 
-        # Add widgets to grid
         grid_layout.addWidget(summary_container, 0, 0)
         grid_layout.addWidget(self.pie_chart_canvas, 0, 1)
         grid_layout.addWidget(self.bar_chart_canvas, 0, 2)
-        grid_layout.addWidget(self.line_chart_canvas, 1, 0, 1, 3) # Span across all 3 columns
+        grid_layout.addWidget(self.line_chart_canvas, 1, 0, 1, 3)
         grid_layout.setColumnStretch(0, 2)
         grid_layout.setColumnStretch(1, 1)
         grid_layout.setColumnStretch(2, 1)
@@ -474,7 +464,6 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(container)
         widgets = {}
 
-        # Top info labels
         widgets['detail_label'] = QLabel("No item selected")
         widgets['detail_label'].setObjectName("SubHeader")
         widgets['detail_balance'] = QLabel()
@@ -485,7 +474,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(widgets['detail_balance'])
         layout.addWidget(widgets['detail_info'])
 
-        # Transactions header with delete button
         trans_header_layout = QHBoxLayout()
         trans_label = QLabel("Transactions")
         trans_label.setStyleSheet("font-size: 12pt; margin-top: 15px;")
@@ -498,12 +486,10 @@ class MainWindow(QMainWindow):
         trans_header_layout.addWidget(widgets['delete_transaction_btn'])
         layout.addLayout(trans_header_layout)
 
-        # Transactions list
         widgets['transaction_list'] = QListWidget()
         widgets['transaction_list'].currentItemChanged.connect(self.on_transaction_selection_changed)
         layout.addWidget(widgets['transaction_list'], 1)
 
-        # Bottom buttons
         widgets['add_payment_btn'] = QPushButton("Add Payment")
         widgets['add_payment_btn'].setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)))
         widgets['add_payment_btn'].clicked.connect(self.add_transaction)
@@ -557,7 +543,6 @@ class MainWindow(QMainWindow):
         list_layout.addWidget(self.history_list_widget)
 
         self.history_details_panel, self.history_widgets = self._create_details_panel_widgets()
-        # Paid items cannot have new payments added.
         self.history_widgets['add_payment_btn'].setVisible(False)
 
         layout.addWidget(list_container, 1)
@@ -624,7 +609,6 @@ class MainWindow(QMainWindow):
         total_paid = calculate_total_transaction_amount([t for t in all_transactions if t.transaction_type == 'payment'])
         total_repaid = calculate_total_transaction_amount([t for t in all_transactions if t.transaction_type == 'repayment'])
         
-        # Update summary labels
         self.summary_labels['debt_incurred'].setText(f"${total_debt:,.2f}")
         self.summary_labels['debt_paid'].setText(f"${total_paid:,.2f}")
         self.summary_labels['debt_remaining'].setText(f"${debt_balance:,.2f}")
@@ -634,7 +618,6 @@ class MainWindow(QMainWindow):
         self.summary_labels['loan_remaining'].setText(f"${loan_balance:,.2f}")
         self.summary_labels['net_position'].setText(f"${net_position:,.2f}")
 
-        # Update pie chart
         self.pie_ax.clear()
         self.pie_ax.set_title('Debt vs. Loans Balance', color='white')
         if debt_balance > 0 or loan_balance > 0:
@@ -650,7 +633,6 @@ class MainWindow(QMainWindow):
             self.pie_ax.text(0.5, 0.5, 'No Data', ha='center', va='center', color='gray')
         self.pie_chart_canvas.draw()
         
-        # Update bar chart
         self.bar_ax.clear()
         self.bar_ax.set_title('Totals vs. Payments', color='white')
         self.bar_ax.tick_params(axis='x', colors='white')
@@ -671,7 +653,6 @@ class MainWindow(QMainWindow):
         self.bar_ax.legend(labelcolor='white', facecolor='#3b4252', edgecolor='#4c566a', bbox_to_anchor=(0.5, -0.1), loc='upper center')
         self.bar_chart_canvas.draw()
         
-        # Update line chart
         self.line_ax.clear()
         self.line_ax.set_title('Net Worth Over Time', color='white')
         self.line_ax.tick_params(axis='x', colors='white')
@@ -695,7 +676,6 @@ class MainWindow(QMainWindow):
         self.active_list_widget.clear()
         selected_item_to_restore = None
         
-        # Use 'or' to provide a default empty string if label is None, preventing sort errors
         sorted_entries = sorted(self.ledger_manager.get_all_entries(), key=lambda e: e.label or '')
         
         for entry in sorted_entries:
@@ -751,7 +731,6 @@ class MainWindow(QMainWindow):
         widgets['delete_transaction_btn'].setEnabled(False)
 
         if entry:
-            # Enable the 'Add Payment' button only if the entry is active
             widgets['add_payment_btn'].setEnabled(entry.status == 'active')
             widgets['add_payment_btn'].setText(f"Add {'Payment' if entry.entry_type == 'debt' else 'Repayment'}")
             
@@ -771,7 +750,6 @@ class MainWindow(QMainWindow):
                 item.setData(Qt.ItemDataRole.UserRole, t)
                 widgets['transaction_list'].addItem(item)
         else:
-            # Reset the panel if no entry is selected
             widgets['detail_label'].setText("No item selected")
             widgets['detail_balance'].setText("")
             widgets['detail_info'].setText("")
@@ -793,10 +771,10 @@ class MainWindow(QMainWindow):
     def on_transaction_selection_changed(self):
         """Enables the delete button for the correct tab's transaction list."""
         tab_index = self.tabs.currentIndex()
-        if tab_index == 1: # Ledger Tab
+        if tab_index == 1:
             is_selected = bool(self.ledger_widgets['transaction_list'].currentItem())
             self.ledger_widgets['delete_transaction_btn'].setEnabled(is_selected)
-        elif tab_index == 2: # History Tab
+        elif tab_index == 2:
             is_selected = bool(self.history_widgets['transaction_list'].currentItem())
             self.history_widgets['delete_transaction_btn'].setEnabled(is_selected)
 
@@ -856,9 +834,9 @@ class MainWindow(QMainWindow):
 
     def delete_transaction(self):
         tab_index = self.tabs.currentIndex()
-        if tab_index == 1: # Ledger Tab
+        if tab_index == 1: 
             item = self.ledger_widgets['transaction_list'].currentItem()
-        elif tab_index == 2: # History Tab
+        elif tab_index == 2: 
             item = self.history_widgets['transaction_list'].currentItem()
         else:
             return
@@ -874,7 +852,6 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             self.transaction_manager.delete_transaction_by_id(trans.id)
             if entry:
-                # This will automatically move an item from "paid" to "active" if necessary
                 self.update_entry_status(entry)
             self.save_and_refresh()
 
@@ -936,7 +913,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "AI Command Error", "Sorry, I couldn't understand that command.")
             return
         
-        # Confirmation dialog
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("Confirm AI Plan")
         msg_box.setText("The AI understood the following plan. Proceed?")
@@ -955,7 +931,6 @@ class MainWindow(QMainWindow):
                 self.execute_ai_plan(editor.commands)
             
     def execute_ai_plan(self, commands):
-        # First, validate the entire plan before executing any part of it.
         for i, command in enumerate(commands):
             if command['action'] == 'add_entry' and not command['payload'].get('label'):
                 msg_box = QMessageBox(self)
@@ -970,10 +945,9 @@ class MainWindow(QMainWindow):
                 if msg_box.clickedButton() == edit_btn:
                     editor = AiPlanEditorDialog(commands, self.tag_manager, self)
                     if editor.exec():
-                        self.execute_ai_plan(editor.commands) # Recursively call with the new plan
-                return # Stop execution of the faulty plan
+                        self.execute_ai_plan(editor.commands)
+                return
 
-        # If validation passes, execute the plan.
         for command in commands:
             try:
                 if command['action'] == 'add_entry':
