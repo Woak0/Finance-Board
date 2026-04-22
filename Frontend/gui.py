@@ -892,10 +892,23 @@ class MainWindow(QMainWindow):
         self.line_ax.spines['right'].set_color('#2e3440')
         snapshots = self.net_worth_manager.get_all_snapshots()
         if len(snapshots) > 1:
-            dates = [s.date_recorded for s in snapshots]
-            values = [s.net_position for s in snapshots]
-            self.line_ax.plot(dates, values, marker='o', color='#88c0d0')
-            self.line_ax.figure.autofmt_xdate()
+            # Filter outliers: remove points >10x the median absolute value
+            all_values = [s.net_position for s in snapshots]
+            abs_vals = sorted([abs(v) for v in all_values if v != 0])
+            if abs_vals:
+                median_abs = abs_vals[len(abs_vals) // 2]
+                threshold = max(median_abs * 10, 50000)  # at least 50k to avoid filtering real data
+                filtered = [(s.date_recorded, s.net_position) for s in snapshots if abs(s.net_position) <= threshold]
+            else:
+                filtered = [(s.date_recorded, s.net_position) for s in snapshots]
+
+            if len(filtered) > 1:
+                dates, values = zip(*filtered)
+                self.line_ax.plot(dates, values, marker='o', color='#88c0d0', linewidth=2, markersize=5)
+                self.line_ax.fill_between(dates, values, alpha=0.1, color='#88c0d0')
+                self.line_ax.figure.autofmt_xdate()
+            else:
+                self.line_ax.text(0.5, 0.5, 'Not enough data to chart', ha='center', va='center', color='gray')
         else:
             self.line_ax.text(0.5, 0.5, 'At least two snapshots needed to see a trend', ha='center', va='center', color='gray')
         self.line_chart_canvas.draw()
@@ -1574,10 +1587,20 @@ class MainWindow(QMainWindow):
         loan_bal = sum(calculate_balance_for_entry(e, all_t) for e in all_e if e.entry_type == 'loan')
         net_pos = loan_bal - debt_bal
 
-        # Only record if the value has changed since the last snapshot
         snapshots = self.net_worth_manager.get_all_snapshots()
+
+        # Skip if unchanged
         if snapshots and abs(snapshots[0].net_position - net_pos) < 0.01:
             return
+
+        # Outlier guard: if change is >10x the median absolute value, skip recording
+        if len(snapshots) >= 3:
+            values = [abs(s.net_position) for s in snapshots if s.net_position != 0]
+            if values:
+                median_val = sorted(values)[len(values) // 2]
+                if median_val > 0 and abs(net_pos) > median_val * 10:
+                    return
+
         self.net_worth_manager.add_snapshot(net_pos)
 
     # --- Helper & Utility Methods ---
