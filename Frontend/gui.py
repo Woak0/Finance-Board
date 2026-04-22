@@ -457,119 +457,133 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.create_history_tab(), "  History  ")
         self.tabs.addTab(self.create_journal_tab(), "  Journal  ")
 
+    def _make_card(self, title_text=None):
+        """Creates a styled card frame for dashboard sections."""
+        card = QFrame()
+        card.setObjectName("DashCard")
+        card.setFrameShape(QFrame.Shape.StyledPanel)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(4)
+        if title_text:
+            t = QLabel(title_text)
+            t.setObjectName("CardTitle")
+            layout.addWidget(t)
+        return card, layout
+
     def create_dashboard_tab(self):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         widget = QWidget()
         main_layout = QVBoxLayout(widget)
-        main_layout.setSpacing(6)
-        main_layout.setContentsMargins(10, 5, 10, 5)
-        title = QLabel("Finance Board Dashboard")
-        title.setObjectName("Header")
-        main_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(16, 10, 16, 10)
 
-        # --- Row 1: Summary (left) + Pie + Bar charts (right), all equal height ---
-        row1 = QHBoxLayout()
-        row1.setSpacing(10)
+        # ===== ROW 1: KPI Cards =====
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(8)
 
-        # Summary panel
-        summary_container = QWidget()
-        summary_layout = QFormLayout(summary_container)
-        summary_layout.setContentsMargins(10, 0, 10, 0)
-        summary_layout.setVerticalSpacing(4)
+        self.stats_cards = {}
+        card_defs = [
+            ('active_debts', 'ACTIVE DEBTS', '#bf616a'),
+            ('paid_this_month', 'PAID THIS MONTH', '#a3be8c'),
+            ('biggest_debt', 'BIGGEST REMAINING', '#d08770'),
+            ('entries_paid_off', 'SETTLED', '#a3be8c'),
+            ('net_position_card', 'NET POSITION', '#88c0d0'),
+        ]
+        for key, label, accent in card_defs:
+            card, cl = self._make_card(label)
+            v = QLabel("--")
+            v.setObjectName("CardValue")
+            v.setStyleSheet(f"color: {accent};")
+            cl.addWidget(v)
+            cl.addStretch()
+            self.stats_cards[key] = v
+            cards_row.addWidget(card, 1)
+
+        # Quick payment card
+        qp_card, qp_layout = self._make_card("QUICK PAYMENT")
+        self.quick_add_combo = QComboBox()
+        self.quick_add_btn = QPushButton("Add Payment")
+        self.quick_add_btn.setObjectName("PrimaryBtn")
+        self.quick_add_btn.clicked.connect(self.quick_add_payment)
+        qp_layout.addWidget(self.quick_add_combo)
+        qp_layout.addWidget(self.quick_add_btn)
+        cards_row.addWidget(qp_card, 2)
+
+        main_layout.addLayout(cards_row)
+
+        # ===== ROW 2: Summary + Pie + Bar =====
+        mid_row = QHBoxLayout()
+        mid_row.setSpacing(8)
+
+        # Summary card
+        sum_card, sum_layout = self._make_card()
         self.summary_labels = {
             'debt_incurred': QLabel(), 'debt_paid': QLabel(), 'debt_remaining': QLabel(), 'debt_eta': QLabel(),
-            'loan_out': QLabel(), 'loan_repaid': QLabel(), 'loan_remaining': QLabel(), 'net_position': QLabel()
+            'loan_out': QLabel(), 'loan_repaid': QLabel(), 'loan_remaining': QLabel(),
         }
-        for label in self.summary_labels.values():
-            label.setFont(QFont("Segoe UI", 10))
-        self.summary_labels['net_position'].setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        for lbl in self.summary_labels.values():
+            lbl.setFont(QFont("Segoe UI", 10))
 
-        summary_layout.addRow(QLabel("<b>DEBTS (Money You Owe)</b>"))
-        summary_layout.addRow("Total Incurred:", self.summary_labels['debt_incurred'])
-        summary_layout.addRow("Payments Made:", self.summary_labels['debt_paid'])
-        summary_layout.addRow("<b>Remaining:</b>", self.summary_labels['debt_remaining'])
-        summary_layout.addRow("<i>Debt-Free ETA:</i>", self.summary_labels['debt_eta'])
-        summary_layout.addRow(QLabel("<b>LOANS (Money Owed to You)</b>"))
-        summary_layout.addRow("Loaned Out:", self.summary_labels['loan_out'])
-        summary_layout.addRow("Repaid to You:", self.summary_labels['loan_repaid'])
-        summary_layout.addRow("<b>To Collect:</b>", self.summary_labels['loan_remaining'])
-        summary_layout.addRow(QLabel())
-        summary_layout.addRow("<b>Net Position:</b>", self.summary_labels['net_position'])
+        form = QFormLayout()
+        form.setVerticalSpacing(3)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.addRow(QLabel("<b style='color:#bf616a'>DEBTS</b>"))
+        form.addRow("Incurred:", self.summary_labels['debt_incurred'])
+        form.addRow("Paid:", self.summary_labels['debt_paid'])
+        form.addRow("<b>Remaining:</b>", self.summary_labels['debt_remaining'])
+        form.addRow("<i>ETA:</i>", self.summary_labels['debt_eta'])
+        form.addRow(QLabel("<b style='color:#a3be8c'>LOANS</b>"))
+        form.addRow("Loaned:", self.summary_labels['loan_out'])
+        form.addRow("Repaid:", self.summary_labels['loan_repaid'])
+        form.addRow("<b>Collect:</b>", self.summary_labels['loan_remaining'])
+        sum_layout.addLayout(form)
+        sum_layout.addStretch()
 
         self.pie_chart_canvas = self.create_pie_chart()
         self.bar_chart_canvas = self.create_bar_chart()
         self.line_chart_canvas = self.create_line_chart()
 
-        row1.addWidget(summary_container, 3)
-        row1.addWidget(self.pie_chart_canvas, 2)
-        row1.addWidget(self.bar_chart_canvas, 2)
-        main_layout.addLayout(row1, 3)
+        pie_card, pie_layout = self._make_card()
+        pie_layout.setContentsMargins(2, 2, 2, 2)
+        pie_layout.addWidget(self.pie_chart_canvas)
 
-        # --- Row 2: Stats cards (compact) + Quick payment ---
-        row2 = QHBoxLayout()
-        row2.setSpacing(6)
+        bar_card, bar_layout = self._make_card()
+        bar_layout.setContentsMargins(2, 2, 2, 2)
+        bar_layout.addWidget(self.bar_chart_canvas)
 
-        self.stats_cards = {}
-        for key, label in [('active_debts', 'Active Debts'), ('paid_this_month', 'Paid This Month'),
-                           ('biggest_debt', 'Biggest Remaining'), ('entries_paid_off', 'Settled')]:
-            card = QWidget()
-            card.setStyleSheet("background-color: #3b4252; border-radius: 6px;")
-            card.setFixedHeight(60)
-            cl = QVBoxLayout(card)
-            cl.setContentsMargins(10, 4, 10, 4)
-            cl.setSpacing(2)
-            t = QLabel(label)
-            t.setStyleSheet("color: #88c0d0; font-size: 8pt;")
-            v = QLabel("--")
-            v.setStyleSheet("font-size: 11pt; font-weight: bold;")
-            cl.addWidget(t)
-            cl.addWidget(v)
-            self.stats_cards[key] = v
-            row2.addWidget(card, 1)
+        mid_row.addWidget(sum_card, 2)
+        mid_row.addWidget(pie_card, 3)
+        mid_row.addWidget(bar_card, 3)
+        main_layout.addLayout(mid_row, 3)
 
-        # Quick payment (compact)
-        qp_card = QWidget()
-        qp_card.setStyleSheet("background-color: #3b4252; border-radius: 6px;")
-        qp_card.setFixedHeight(60)
-        qp_layout = QHBoxLayout(qp_card)
-        qp_layout.setContentsMargins(10, 4, 10, 4)
-        qp_layout.setSpacing(6)
-        self.quick_add_combo = QComboBox()
-        self.quick_add_combo.setMinimumWidth(180)
-        self.quick_add_btn = QPushButton("Pay")
-        self.quick_add_btn.setFixedWidth(60)
-        self.quick_add_btn.clicked.connect(self.quick_add_payment)
-        qp_layout.addWidget(QLabel("Quick:"))
-        qp_layout.addWidget(self.quick_add_combo, 1)
-        qp_layout.addWidget(self.quick_add_btn)
-        row2.addWidget(qp_card, 2)
-
-        main_layout.addLayout(row2, 0)
-
-        # --- Row 3: Line chart (gets the most space) ---
-        main_layout.addWidget(self.line_chart_canvas, 4)
+        # ===== ROW 3: Line chart =====
+        line_card, line_layout = self._make_card()
+        line_layout.setContentsMargins(4, 4, 4, 4)
+        line_layout.addWidget(self.line_chart_canvas)
+        main_layout.addWidget(line_card, 4)
 
         scroll.setWidget(widget)
         return scroll
     
     def create_pie_chart(self):
-        fig, self.pie_ax = plt.subplots(facecolor='#2e3440')
-        self.pie_ax.set_facecolor('#2e3440')
+        fig, self.pie_ax = plt.subplots(facecolor='#3b4252')
+        self.pie_ax.set_facecolor('#3b4252')
         fig.subplots_adjust(left=0.05, right=0.70, top=0.88, bottom=0.05)
         return FigureCanvas(fig)
 
     def create_bar_chart(self):
-        fig, self.bar_ax = plt.subplots(facecolor='#2e3440')
-        self.bar_ax.set_facecolor('#2e3440')
+        fig, self.bar_ax = plt.subplots(facecolor='#3b4252')
+        self.bar_ax.set_facecolor('#3b4252')
         fig.subplots_adjust(left=0.18, right=0.95, top=0.88, bottom=0.30)
         return FigureCanvas(fig)
 
     def create_line_chart(self):
-        fig, self.line_ax = plt.subplots(facecolor='#2e3440')
-        self.line_ax.set_facecolor('#2e3440')
-        fig.subplots_adjust(left=0.08, right=0.97, top=0.90, bottom=0.20)
+        fig, self.line_ax = plt.subplots(facecolor='#3b4252')
+        self.line_ax.set_facecolor('#3b4252')
+        fig.subplots_adjust(left=0.08, right=0.97, top=0.90, bottom=0.18)
         return FigureCanvas(fig)
 
     def _create_details_panel_widgets(self):
@@ -585,10 +599,6 @@ class MainWindow(QMainWindow):
         widgets['progress_bar'] = QProgressBar()
         widgets['progress_bar'].setTextVisible(True)
         widgets['progress_bar'].setFormat("%p% paid off")
-        widgets['progress_bar'].setStyleSheet("""
-            QProgressBar { background-color: #3b4252; border: 1px solid #434c5e; border-radius: 6px; height: 22px; text-align: center; color: #eceff4; }
-            QProgressBar::chunk { background-color: #a3be8c; border-radius: 5px; }
-        """)
         widgets['progress_bar'].setVisible(False)
         widgets['detail_info'] = QLabel()
         widgets['detail_info'].setWordWrap(True)
@@ -809,8 +819,10 @@ class MainWindow(QMainWindow):
         self.summary_labels['loan_out'].setText(f"${total_loaned:,.2f}")
         self.summary_labels['loan_repaid'].setText(f"<span style='color:#a3be8c'>${total_repaid:,.2f}</span>")
         self.summary_labels['loan_remaining'].setText(f"${loan_balance:,.2f}")
+        # Net position goes to the KPI card
         net_color = '#a3be8c' if net_position >= 0 else '#bf616a'
-        self.summary_labels['net_position'].setText(f"<span style='color:{net_color}'>${net_position:,.2f}</span>")
+        self.stats_cards['net_position_card'].setText(f"${net_position:,.2f}")
+        self.stats_cards['net_position_card'].setStyleSheet(f"color: {net_color}; font-size: 13pt; font-weight: bold;")
 
         self.pie_ax.clear()
         self.pie_ax.set_title('Debt vs. Loans Balance', color='white')
