@@ -194,10 +194,9 @@ DARK_STYLESHEET = """
         background: transparent;
     }
     QComboBox::down-arrow {
-        image: none;
-        border-style: solid;
-        border-width: 5px 4px 0 4px;
-        border-color: #88c0d0 transparent transparent transparent;
+        image: url(assets/dropdown_arrow.png);
+        width: 10px;
+        height: 8px;
     }
     QComboBox QAbstractItemView {
         background-color: #3b4252;
