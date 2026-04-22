@@ -174,31 +174,34 @@ DARK_STYLESHEET = """
         border-color: #88c0d0;
     }
     QComboBox {
-        background-color: #3b4252;
+        background-color: #434c5e;
         color: #eceff4;
-        border: 1px solid #4c566a;
+        border: 1px solid #5e81ac;
         border-radius: 6px;
-        padding: 6px 30px 6px 10px;
+        padding: 7px 28px 7px 12px;
         selection-background-color: #5e81ac;
+        min-height: 18px;
     }
     QComboBox:hover {
         border-color: #88c0d0;
+        background-color: #4c566a;
     }
     QComboBox::drop-down {
         subcontrol-origin: padding;
         subcontrol-position: center right;
-        width: 28px;
+        width: 26px;
         border: none;
-        border-left: 1px solid #4c566a;
+        background-color: #5e81ac;
         border-top-right-radius: 6px;
         border-bottom-right-radius: 6px;
     }
+    QComboBox::drop-down:hover {
+        background-color: #81a1c1;
+    }
     QComboBox::down-arrow {
         image: none;
-        border-left: 5px solid transparent;
-        border-right: 5px solid transparent;
-        border-top: 6px solid #88c0d0;
-        margin-right: 6px;
+        width: 0;
+        height: 0;
     }
     QComboBox QAbstractItemView {
         background-color: #3b4252;

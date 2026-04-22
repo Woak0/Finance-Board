@@ -190,7 +190,6 @@ class AiChatDialog(QDialog):
         self.input_line.setPlaceholderText("Ask a question...")
         self.input_line.returnPressed.connect(self.send_message)
         send_btn = QPushButton("Send")
-        send_btn.setIcon(QIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight)))
         send_btn.clicked.connect(self.send_message)
         input_layout.addWidget(self.input_line)
         input_layout.addWidget(send_btn)
@@ -235,7 +234,6 @@ class AiPlanEditorDialog(QDialog):
         
         btn_layout = QHBoxLayout()
         edit_btn = QPushButton("Edit Selected")
-        edit_btn.setIcon(QIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
         edit_btn.clicked.connect(self.edit_selected_command)
         
         btn_layout.addStretch()
@@ -614,7 +612,6 @@ class MainWindow(QMainWindow):
 
     def _create_details_panel_widgets(self):
         """Factory method to create a reusable details panel."""
-        s = self.style()
         container = QWidget()
         layout = QVBoxLayout(container)
         widgets = {}
@@ -637,11 +634,12 @@ class MainWindow(QMainWindow):
         trans_header_layout = QHBoxLayout()
         trans_label = QLabel("Transactions")
         trans_label.setStyleSheet("font-size: 12pt; margin-top: 15px;")
-        widgets['edit_transaction_btn'] = QPushButton(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)), "")
+        widgets['edit_transaction_btn'] = QPushButton("Edit")
         widgets['edit_transaction_btn'].setToolTip("Edit Selected Transaction")
         widgets['edit_transaction_btn'].setEnabled(False)
         widgets['edit_transaction_btn'].clicked.connect(self.edit_transaction)
-        widgets['delete_transaction_btn'] = QPushButton(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)), "")
+        widgets['delete_transaction_btn'] = QPushButton("Delete")
+        widgets['delete_transaction_btn'].setObjectName("DangerBtn")
         widgets['delete_transaction_btn'].setToolTip("Delete Selected Transaction")
         widgets['delete_transaction_btn'].setEnabled(False)
         widgets['delete_transaction_btn'].clicked.connect(self.delete_transaction)
@@ -660,7 +658,6 @@ class MainWindow(QMainWindow):
         widgets['add_payment_btn'].setObjectName("SuccessBtn")
         widgets['add_payment_btn'].clicked.connect(self.add_transaction)
         widgets['use_template_btn'] = QPushButton("Use Template")
-        widgets['use_template_btn'].setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogListView)))
         widgets['use_template_btn'].clicked.connect(self.use_transaction_template)
         widgets['use_template_btn'].setEnabled(False)
         payment_btn_layout.addWidget(widgets['add_payment_btn'])
@@ -706,10 +703,10 @@ class MainWindow(QMainWindow):
         # Filter and sort controls
         filter_sort_layout = QHBoxLayout()
         self.ledger_filter = QComboBox()
-        self.ledger_filter.addItems(["All Types", "Debts Only", "Loans Only"])
+        self.ledger_filter.addItems(["\u25BE  All Types", "\u25BE  Debts Only", "\u25BE  Loans Only"])
         self.ledger_filter.currentIndexChanged.connect(self.refresh_ledger_list)
         self.ledger_sort = QComboBox()
-        self.ledger_sort.addItems(["Sort: A-Z", "Sort: Z-A", "Sort: Balance (Low)", "Sort: Balance (High)", "Sort: Date (Newest)", "Sort: Date (Oldest)"])
+        self.ledger_sort.addItems(["\u25BE  Sort: A-Z", "\u25BE  Sort: Z-A", "\u25BE  Balance (Low)", "\u25BE  Balance (High)", "\u25BE  Date (Newest)", "\u25BE  Date (Oldest)"])
         self.ledger_sort.currentIndexChanged.connect(self.refresh_ledger_list)
         filter_sort_layout.addWidget(self.ledger_filter)
         filter_sort_layout.addWidget(self.ledger_sort)
@@ -744,7 +741,6 @@ class MainWindow(QMainWindow):
         return widget
 
     def create_journal_tab(self):
-        s = self.style()
         widget = QWidget()
         main_layout = QHBoxLayout(widget)
 
@@ -759,10 +755,8 @@ class MainWindow(QMainWindow):
 
         nb_btn_layout = QHBoxLayout()
         add_nb_btn = QPushButton("New Notebook")
-        add_nb_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder)))
         add_nb_btn.clicked.connect(self.add_notebook)
         self.rename_nb_btn = QPushButton("Rename")
-        self.rename_nb_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
         self.rename_nb_btn.clicked.connect(self.rename_notebook)
         self.rename_nb_btn.setEnabled(False)
         nb_btn_layout.addWidget(add_nb_btn)
