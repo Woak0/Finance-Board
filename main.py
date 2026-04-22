@@ -42,7 +42,7 @@ DARK_STYLESHEET = """
         font-size: 10pt;
     }
     QTabBar::tab:selected {
-        color: #eceff4;
+        color: #88c0d0;
         border-bottom: 3px solid #88c0d0;
         font-weight: bold;
     }
@@ -128,18 +128,41 @@ DARK_STYLESHEET = """
         border-color: #3b4252;
     }
     QPushButton#PrimaryBtn {
-        background-color: #5e81ac;
-        border-color: #5e81ac;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #5e81ac, stop:1 #5378a0);
+        border: 1px solid #5e81ac;
         color: #eceff4;
         font-weight: bold;
+        padding: 8px 20px;
     }
     QPushButton#PrimaryBtn:hover {
-        background-color: #81a1c1;
+        background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #81a1c1, stop:1 #6d93b5);
         border-color: #81a1c1;
+    }
+    QPushButton#PrimaryBtn:pressed {
+        background-color: #4c6e96;
+    }
+    QPushButton#DangerBtn {
+        background-color: #bf616a;
+        border-color: #bf616a;
+        color: #eceff4;
+    }
+    QPushButton#DangerBtn:hover {
+        background-color: #d08770;
+        border-color: #d08770;
+    }
+    QPushButton#SuccessBtn {
+        background-color: #a3be8c;
+        border-color: #a3be8c;
+        color: #2e3440;
+        font-weight: bold;
+    }
+    QPushButton#SuccessBtn:hover {
+        background-color: #b4cc9e;
+        border-color: #b4cc9e;
     }
 
     /* --- Inputs --- */
-    QLineEdit, QDoubleSpinBox, QComboBox, QTextEdit {
+    QLineEdit, QDoubleSpinBox, QTextEdit {
         background-color: #3b4252;
         color: #eceff4;
         border: 1px solid #434c5e;
@@ -150,12 +173,39 @@ DARK_STYLESHEET = """
     QLineEdit:focus, QTextEdit:focus, QDoubleSpinBox:focus {
         border-color: #88c0d0;
     }
-    QComboBox::drop-down { border: 0px; }
+    QComboBox {
+        background-color: #3b4252;
+        color: #eceff4;
+        border: 1px solid #4c566a;
+        border-radius: 6px;
+        padding: 6px 30px 6px 10px;
+        selection-background-color: #5e81ac;
+    }
+    QComboBox:hover {
+        border-color: #88c0d0;
+    }
+    QComboBox::drop-down {
+        subcontrol-origin: padding;
+        subcontrol-position: center right;
+        width: 28px;
+        border: none;
+        border-left: 1px solid #4c566a;
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
+    }
+    QComboBox::down-arrow {
+        image: none;
+        border-left: 5px solid transparent;
+        border-right: 5px solid transparent;
+        border-top: 6px solid #88c0d0;
+        margin-right: 6px;
+    }
     QComboBox QAbstractItemView {
         background-color: #3b4252;
-        border: 1px solid #434c5e;
+        border: 1px solid #4c566a;
         border-radius: 4px;
         selection-background-color: #5e81ac;
+        padding: 4px;
     }
 
     /* --- Menus --- */
@@ -251,9 +301,12 @@ DARK_STYLESHEET = """
         background-color: #3b4252;
         border: 1px solid #434c5e;
         border-radius: 10px;
+        border-left: 3px solid #5e81ac;
     }
     QFrame#DashCard:hover {
-        border-color: #5e81ac;
+        border-color: #88c0d0;
+        border-left: 3px solid #88c0d0;
+        background-color: #3d4556;
     }
 
     /* --- Progress Bar --- */

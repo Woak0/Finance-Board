@@ -494,6 +494,19 @@ class MainWindow(QMainWindow):
         ]
         for key, label, accent in card_defs:
             card, cl = self._make_card(label)
+            card.setStyleSheet(f"""
+                QFrame#DashCard {{
+                    background-color: #3b4252;
+                    border: 1px solid #434c5e;
+                    border-radius: 10px;
+                    border-left: 3px solid {accent};
+                }}
+                QFrame#DashCard:hover {{
+                    border-color: {accent};
+                    border-left: 3px solid {accent};
+                    background-color: #3d4556;
+                }}
+            """)
             v = QLabel("--")
             v.setObjectName("CardValue")
             v.setStyleSheet(f"color: {accent};")
@@ -504,6 +517,19 @@ class MainWindow(QMainWindow):
 
         # Quick payment card
         qp_card, qp_layout = self._make_card("QUICK PAYMENT")
+        qp_card.setStyleSheet("""
+            QFrame#DashCard {
+                background-color: #3b4252;
+                border: 1px solid #434c5e;
+                border-radius: 10px;
+                border-left: 3px solid #5e81ac;
+            }
+            QFrame#DashCard:hover {
+                border-color: #5e81ac;
+                border-left: 3px solid #5e81ac;
+                background-color: #3d4556;
+            }
+        """)
         self.quick_add_combo = QComboBox()
         self.quick_add_btn = QPushButton("Add Payment")
         self.quick_add_btn.setObjectName("PrimaryBtn")
@@ -631,7 +657,7 @@ class MainWindow(QMainWindow):
 
         payment_btn_layout = QHBoxLayout()
         widgets['add_payment_btn'] = QPushButton("Add Payment")
-        widgets['add_payment_btn'].setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)))
+        widgets['add_payment_btn'].setObjectName("SuccessBtn")
         widgets['add_payment_btn'].clicked.connect(self.add_transaction)
         widgets['use_template_btn'] = QPushButton("Use Template")
         widgets['use_template_btn'].setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogListView)))
@@ -643,16 +669,14 @@ class MainWindow(QMainWindow):
 
         crud_layout = QHBoxLayout()
         add_btn = QPushButton("Add Entry")
-        add_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileIcon)))
+        add_btn.setObjectName("PrimaryBtn")
         add_btn.clicked.connect(self.add_entry)
         dup_btn = QPushButton("Duplicate")
-        dup_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)))
         dup_btn.clicked.connect(self.duplicate_entry)
         edit_btn = QPushButton("Edit Entry")
-        edit_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
         edit_btn.clicked.connect(self.edit_entry)
         delete_btn = QPushButton("Delete Entry")
-        delete_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)))
+        delete_btn.setObjectName("DangerBtn")
         delete_btn.clicked.connect(self.delete_entry)
 
         crud_layout.addStretch()
@@ -759,14 +783,13 @@ class MainWindow(QMainWindow):
 
         btn_layout = QHBoxLayout()
         add_btn = QPushButton("Add Entry")
-        add_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileLinkIcon)))
+        add_btn.setObjectName("PrimaryBtn")
         add_btn.clicked.connect(self.add_journal_entry)
         self.edit_journal_btn = QPushButton("Edit Selected")
-        self.edit_journal_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
         self.edit_journal_btn.clicked.connect(self.edit_journal_entry)
         self.edit_journal_btn.setEnabled(False)
         self.delete_journal_btn = QPushButton("Delete Selected")
-        self.delete_journal_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)))
+        self.delete_journal_btn.setObjectName("DangerBtn")
         self.delete_journal_btn.clicked.connect(self.delete_journal_entry)
         self.delete_journal_btn.setEnabled(False)
 
