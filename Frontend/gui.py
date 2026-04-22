@@ -703,10 +703,10 @@ class MainWindow(QMainWindow):
         # Filter and sort controls
         filter_sort_layout = QHBoxLayout()
         self.ledger_filter = QComboBox()
-        self.ledger_filter.addItems(["\u25BE  All Types", "\u25BE  Debts Only", "\u25BE  Loans Only"])
+        self.ledger_filter.addItems(["All Types", "Debts Only", "Loans Only"])
         self.ledger_filter.currentIndexChanged.connect(self.refresh_ledger_list)
         self.ledger_sort = QComboBox()
-        self.ledger_sort.addItems(["\u25BE  Sort: A-Z", "\u25BE  Sort: Z-A", "\u25BE  Balance (Low)", "\u25BE  Balance (High)", "\u25BE  Date (Newest)", "\u25BE  Date (Oldest)"])
+        self.ledger_sort.addItems(["Sort: A-Z", "Sort: Z-A", "Balance (Low)", "Balance (High)", "Date (Newest)", "Date (Oldest)"])
         self.ledger_sort.currentIndexChanged.connect(self.refresh_ledger_list)
         filter_sort_layout.addWidget(self.ledger_filter)
         filter_sort_layout.addWidget(self.ledger_sort)

@@ -189,19 +189,15 @@ DARK_STYLESHEET = """
     QComboBox::drop-down {
         subcontrol-origin: padding;
         subcontrol-position: center right;
-        width: 26px;
+        width: 20px;
         border: none;
-        background-color: #5e81ac;
-        border-top-right-radius: 6px;
-        border-bottom-right-radius: 6px;
-    }
-    QComboBox::drop-down:hover {
-        background-color: #81a1c1;
+        background: transparent;
     }
     QComboBox::down-arrow {
         image: none;
-        width: 0;
-        height: 0;
+        border-style: solid;
+        border-width: 5px 4px 0 4px;
+        border-color: #88c0d0 transparent transparent transparent;
     }
     QComboBox QAbstractItemView {
         background-color: #3b4252;
