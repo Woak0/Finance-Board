@@ -1,15 +1,14 @@
 @echo off
 echo ===================================
-echo  Packaging Finance Board...
+echo  Packaging Finance Board v2.0.0
 echo ===================================
 
-REM 
 pip install pyinstaller
 
-REM 
 pyinstaller --name "FinanceBoard" ^
             --windowed ^
             --icon="assets/icon.ico" ^
+            --add-data="assets;assets" ^
             --clean ^
             --noconfirm ^
             main.py

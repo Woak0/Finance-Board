@@ -327,8 +327,13 @@ class MainWindow(QMainWindow):
         if not self.config.get("OPENROUTER_API_KEY"):
             self.show_api_key_dialog(is_first_run=True)
 
-        self.setWindowTitle("Finance Board")
-        self.setWindowIcon(QIcon("assets/icon.ico"))
+        self.setWindowTitle("Finance Board v2.0.0")
+        import sys, os
+        if getattr(sys, 'frozen', False):
+            icon_path = os.path.join(sys._MEIPASS, 'assets', 'icon.ico')
+        else:
+            icon_path = 'assets/icon.ico'
+        self.setWindowIcon(QIcon(icon_path))
         self.setMinimumSize(1200, 800)
         self.resize(1600, 1000)
         self.setStatusBar(QStatusBar(self))

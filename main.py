@@ -1,6 +1,15 @@
 import sys
+import os
 from Frontend.gui import MainWindow
 from PyQt6.QtWidgets import QApplication
+
+def get_asset_path(filename):
+    """Resolve asset path for both dev and PyInstaller builds."""
+    if getattr(sys, 'frozen', False):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, 'assets', filename).replace('\\', '/')
 from Backend.storage.storage_manager import StorageManager
 from Backend.core.ledger_manager import LedgerManager, LedgerEntry
 from Backend.core.transaction_manager import TransactionManager, Transaction
@@ -340,7 +349,10 @@ DARK_STYLESHEET = """
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    app.setStyleSheet(DARK_STYLESHEET)
+    app.setStyleSheet(DARK_STYLESHEET.replace(
+        "url(assets/dropdown_arrow.png)",
+        f"url({get_asset_path('dropdown_arrow.png')})"
+    ))
 
     config = load_config()
     
