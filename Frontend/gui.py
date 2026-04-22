@@ -552,29 +552,62 @@ class MainWindow(QMainWindow):
     def create_journal_tab(self):
         s = self.style()
         widget = QWidget()
-        layout = QVBoxLayout(widget)
-        title = QLabel("Financial Journal")
-        title.setObjectName("Header")
-        layout.addWidget(title)
-        
+        main_layout = QHBoxLayout(widget)
+
+        # --- Left panel: Notebooks ---
+        notebook_panel = QWidget()
+        notebook_layout = QVBoxLayout(notebook_panel)
+        notebook_layout.addWidget(QLabel("<b>Notebooks</b>"))
+
+        self.notebook_list = QListWidget()
+        self.notebook_list.currentItemChanged.connect(self.on_notebook_selection_changed)
+        notebook_layout.addWidget(self.notebook_list, 1)
+
+        nb_btn_layout = QHBoxLayout()
+        add_nb_btn = QPushButton("New Notebook")
+        add_nb_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogNewFolder)))
+        add_nb_btn.clicked.connect(self.add_notebook)
+        self.rename_nb_btn = QPushButton("Rename")
+        self.rename_nb_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
+        self.rename_nb_btn.clicked.connect(self.rename_notebook)
+        self.rename_nb_btn.setEnabled(False)
+        nb_btn_layout.addWidget(add_nb_btn)
+        nb_btn_layout.addWidget(self.rename_nb_btn)
+        notebook_layout.addLayout(nb_btn_layout)
+
+        # --- Right panel: Entries ---
+        entry_panel = QWidget()
+        entry_layout = QVBoxLayout(entry_panel)
+        self.journal_header = QLabel("Financial Journal")
+        self.journal_header.setObjectName("Header")
+        entry_layout.addWidget(self.journal_header)
+
         self.journal_list = QListWidget()
         self.journal_list.setWordWrap(True)
         self.journal_list.currentItemChanged.connect(self.on_journal_selection_changed)
-        layout.addWidget(self.journal_list, 1)
-        
+        entry_layout.addWidget(self.journal_list, 1)
+
         btn_layout = QHBoxLayout()
         add_btn = QPushButton("Add Entry")
         add_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileLinkIcon)))
         add_btn.clicked.connect(self.add_journal_entry)
-        self.delete_journal_btn = QPushButton("Delete Selected Entry")
+        self.edit_journal_btn = QPushButton("Edit Selected")
+        self.edit_journal_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
+        self.edit_journal_btn.clicked.connect(self.edit_journal_entry)
+        self.edit_journal_btn.setEnabled(False)
+        self.delete_journal_btn = QPushButton("Delete Selected")
         self.delete_journal_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)))
         self.delete_journal_btn.clicked.connect(self.delete_journal_entry)
         self.delete_journal_btn.setEnabled(False)
-        
+
         btn_layout.addStretch()
         btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(self.edit_journal_btn)
         btn_layout.addWidget(self.delete_journal_btn)
-        layout.addLayout(btn_layout)
+        entry_layout.addLayout(btn_layout)
+
+        main_layout.addWidget(notebook_panel, 1)
+        main_layout.addWidget(entry_panel, 3)
         return widget
 
     # --- UI Refresh & Update Logic ---
@@ -712,13 +745,46 @@ class MainWindow(QMainWindow):
             self._update_details_panel(None, self.history_widgets)
 
     def refresh_journal_list(self):
+        # Refresh notebook list
+        current_notebook = None
+        if self.notebook_list.currentItem():
+            current_notebook = self.notebook_list.currentItem().text()
+
+        self.notebook_list.clear()
+        notebooks = self.journal_manager.get_notebooks()
+        if not notebooks:
+            notebooks = ["General"]
+
+        notebook_to_select = None
+        for nb in notebooks:
+            item = QListWidgetItem(nb)
+            self.notebook_list.addItem(item)
+            if nb == current_notebook:
+                notebook_to_select = item
+
+        if notebook_to_select:
+            self.notebook_list.setCurrentItem(notebook_to_select)
+        elif self.notebook_list.count() > 0:
+            self.notebook_list.setCurrentRow(0)
+
+        self._refresh_journal_entries()
+
+    def _refresh_journal_entries(self):
+        """Refreshes the journal entry list based on the selected notebook."""
         current_id = self.get_selected_journal_id()
         self.journal_list.clear()
-        if not self.journal_manager.get_all_entries():
-            self.delete_journal_btn.setEnabled(False)
+        self.delete_journal_btn.setEnabled(False)
+        self.edit_journal_btn.setEnabled(False)
+
+        selected_notebook = self.notebook_list.currentItem()
+        if not selected_notebook:
             return
-            
-        for entry in self.journal_manager.get_all_entries():
+
+        notebook_name = selected_notebook.text()
+        self.journal_header.setText(f"Journal - {notebook_name}")
+        entries = self.journal_manager.get_entries_by_notebook(notebook_name)
+
+        for entry in entries:
             item = QListWidgetItem(f"{entry.date_created.strftime('%Y-%m-%d %H:%M')}\n{entry.content}")
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.journal_list.addItem(item)
@@ -765,8 +831,15 @@ class MainWindow(QMainWindow):
         entry = current.data(Qt.ItemDataRole.UserRole) if current else None
         self._update_details_panel(entry, self.history_widgets)
 
+    def on_notebook_selection_changed(self, current, previous):
+        self._refresh_journal_entries()
+        can_rename = bool(current) and current.text() != "General"
+        self.rename_nb_btn.setEnabled(can_rename)
+
     def on_journal_selection_changed(self):
-        self.delete_journal_btn.setEnabled(bool(self.journal_list.currentItem()))
+        has_selection = bool(self.journal_list.currentItem())
+        self.delete_journal_btn.setEnabled(has_selection)
+        self.edit_journal_btn.setEnabled(has_selection)
     
     def on_transaction_selection_changed(self):
         """Enables the delete button for the correct tab's transaction list."""
@@ -856,9 +929,22 @@ class MainWindow(QMainWindow):
             self.save_and_refresh()
 
     def add_journal_entry(self):
-        text, ok = QInputDialog.getMultiLineText(self, "New Journal Entry", "Enter your thoughts or notes:")
+        notebook = "General"
+        if self.notebook_list.currentItem():
+            notebook = self.notebook_list.currentItem().text()
+        text, ok = QInputDialog.getMultiLineText(self, "New Journal Entry", f"New entry in '{notebook}':")
         if ok and text:
-            self.journal_manager.add_entry(text)
+            self.journal_manager.add_entry(text, notebook=notebook)
+            self.save_and_refresh()
+
+    def edit_journal_entry(self):
+        item = self.journal_list.currentItem()
+        if not item:
+            return
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        text, ok = QInputDialog.getMultiLineText(self, "Edit Journal Entry", "Edit your entry:", entry.content)
+        if ok and text:
+            entry.content = text
             self.save_and_refresh()
 
     def delete_journal_entry(self):
@@ -871,6 +957,41 @@ class MainWindow(QMainWindow):
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
             self.journal_manager.delete_entry_by_id(entry.id)
+            self.save_and_refresh()
+
+    def add_notebook(self):
+        name, ok = QInputDialog.getText(self, "New Notebook", "Notebook name:")
+        if ok and name and name.strip():
+            name = name.strip()
+            existing = self.journal_manager.get_notebooks()
+            if name in existing:
+                QMessageBox.warning(self, "Duplicate", f"A notebook named '{name}' already exists.")
+                return
+            # Create an empty entry to establish the notebook, then immediately delete it
+            # Actually, just add a placeholder - better UX is to just select it and let user add entries
+            # We'll create a dummy entry approach won't work. Instead, just add an entry directly.
+            # Simplest: create the notebook by adding an entry to it
+            text, text_ok = QInputDialog.getMultiLineText(self, "First Entry", f"Add the first entry to '{name}':")
+            if text_ok and text:
+                self.journal_manager.add_entry(text, notebook=name)
+                self.save_and_refresh()
+                # Select the new notebook
+                for i in range(self.notebook_list.count()):
+                    if self.notebook_list.item(i).text() == name:
+                        self.notebook_list.setCurrentRow(i)
+                        break
+
+    def rename_notebook(self):
+        current_item = self.notebook_list.currentItem()
+        if not current_item or current_item.text() == "General":
+            return
+        old_name = current_item.text()
+        new_name, ok = QInputDialog.getText(self, "Rename Notebook", "New name:", text=old_name)
+        if ok and new_name and new_name.strip() and new_name.strip() != old_name:
+            new_name = new_name.strip()
+            for entry in self.journal_manager.entries:
+                if entry.notebook == old_name:
+                    entry.notebook = new_name
             self.save_and_refresh()
 
     # --- AI-Specific Methods ---
