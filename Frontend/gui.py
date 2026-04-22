@@ -386,10 +386,10 @@ class MainWindow(QMainWindow):
     def create_tabs(self):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
-        self.tabs.addTab(self.create_dashboard_tab(), "Dashboard")
-        self.tabs.addTab(self.create_ledger_tab(), "Ledger & Transactions")
-        self.tabs.addTab(self.create_history_tab(), "History")
-        self.tabs.addTab(self.create_journal_tab(), "Journal")
+        self.tabs.addTab(self.create_dashboard_tab(), "  Dashboard  ")
+        self.tabs.addTab(self.create_ledger_tab(), "  Ledger  ")
+        self.tabs.addTab(self.create_history_tab(), "  History  ")
+        self.tabs.addTab(self.create_journal_tab(), "  Journal  ")
 
     def create_dashboard_tab(self):
         widget = QWidget()
@@ -656,14 +656,15 @@ class MainWindow(QMainWindow):
         total_paid = calculate_total_transaction_amount([t for t in all_transactions if t.transaction_type == 'payment'])
         total_repaid = calculate_total_transaction_amount([t for t in all_transactions if t.transaction_type == 'repayment'])
         
-        self.summary_labels['debt_incurred'].setText(f"${total_debt:,.2f}")
-        self.summary_labels['debt_paid'].setText(f"${total_paid:,.2f}")
-        self.summary_labels['debt_remaining'].setText(f"${debt_balance:,.2f}")
+        self.summary_labels['debt_incurred'].setText(f"<span style='color:#bf616a'>${total_debt:,.2f}</span>")
+        self.summary_labels['debt_paid'].setText(f"<span style='color:#a3be8c'>${total_paid:,.2f}</span>")
+        self.summary_labels['debt_remaining'].setText(f"<span style='color:#bf616a'>${debt_balance:,.2f}</span>")
         self.summary_labels['debt_eta'].setText(calculate_overall_eta(debt_entries, [t for t in all_transactions if t.transaction_type == 'payment']))
         self.summary_labels['loan_out'].setText(f"${total_loaned:,.2f}")
-        self.summary_labels['loan_repaid'].setText(f"${total_repaid:,.2f}")
+        self.summary_labels['loan_repaid'].setText(f"<span style='color:#a3be8c'>${total_repaid:,.2f}</span>")
         self.summary_labels['loan_remaining'].setText(f"${loan_balance:,.2f}")
-        self.summary_labels['net_position'].setText(f"${net_position:,.2f}")
+        net_color = '#a3be8c' if net_position >= 0 else '#bf616a'
+        self.summary_labels['net_position'].setText(f"<span style='color:{net_color}'>${net_position:,.2f}</span>")
 
         self.pie_ax.clear()
         self.pie_ax.set_title('Debt vs. Loans Balance', color='white')
@@ -725,9 +726,12 @@ class MainWindow(QMainWindow):
         
         sorted_entries = sorted(self.ledger_manager.get_all_entries(), key=lambda e: e.label or '')
         
+        all_transactions = self.transaction_manager.get_all_transactions()
         for entry in sorted_entries:
             if entry.status == 'active':
-                item = QListWidgetItem(f"{entry.label}")
+                balance = calculate_balance_for_entry(entry, all_transactions)
+                type_icon = "\u25B2" if entry.entry_type == 'loan' else "\u25BC"
+                item = QListWidgetItem(f"{type_icon}  {entry.label}    ${balance:,.2f}")
                 item.setData(Qt.ItemDataRole.UserRole, entry)
                 self.active_list_widget.addItem(item)
                 if entry and current_id and entry.id == current_id:
@@ -745,9 +749,11 @@ class MainWindow(QMainWindow):
 
         sorted_entries = sorted(self.ledger_manager.get_all_entries(), key=lambda e: e.label or '')
 
+        all_transactions = self.transaction_manager.get_all_transactions()
         for entry in sorted_entries:
             if entry.status == 'paid':
-                item = QListWidgetItem(f"{entry.label}")
+                type_label = "Loan" if entry.entry_type == 'loan' else "Debt"
+                item = QListWidgetItem(f"\u2713  {entry.label}  ({type_label} - ${entry.amount:,.2f})")
                 item.setData(Qt.ItemDataRole.UserRole, entry)
                 self.history_list_widget.addItem(item)
                 if entry and current_id and entry.id == current_id:
