@@ -394,15 +394,19 @@ class MainWindow(QMainWindow):
     def create_dashboard_tab(self):
         widget = QWidget()
         main_layout = QVBoxLayout(widget)
+        main_layout.setSpacing(10)
         title = QLabel("Finance Board Dashboard")
         title.setObjectName("Header")
         main_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
 
-        grid_layout = QGridLayout()
-        main_layout.addLayout(grid_layout)
+        # --- Top row: Summary + Charts side by side ---
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(15)
 
+        # Summary panel
         summary_container = QWidget()
         summary_layout = QFormLayout(summary_container)
+        summary_layout.setContentsMargins(10, 5, 10, 5)
         self.summary_labels = {
             'debt_incurred': QLabel(), 'debt_paid': QLabel(), 'debt_remaining': QLabel(), 'debt_eta': QLabel(),
             'loan_out': QLabel(), 'loan_repaid': QLabel(), 'loan_remaining': QLabel(), 'net_position': QLabel()
@@ -410,51 +414,61 @@ class MainWindow(QMainWindow):
         for label in self.summary_labels.values():
             label.setFont(QFont("Segoe UI", 11))
         self.summary_labels['net_position'].setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        
-        summary_layout.addRow(QLabel()) # Spacer
+
         summary_layout.addRow(QLabel("<b>DEBTS (Money You Owe)</b>"))
         summary_layout.addRow("Total Debt Incurred:", self.summary_labels['debt_incurred'])
         summary_layout.addRow("Total Payments Made:", self.summary_labels['debt_paid'])
         summary_layout.addRow("<b>Remaining Debt Balance:</b>", self.summary_labels['debt_remaining'])
         summary_layout.addRow("<i>Est. Debt-Free Date:</i>", self.summary_labels['debt_eta'])
-        summary_layout.addRow(QLabel()) # Spacer
+        summary_layout.addRow(QLabel())
         summary_layout.addRow(QLabel("<b>LOANS (Money Owed to You)</b>"))
         summary_layout.addRow("Total Loaned Out:", self.summary_labels['loan_out'])
         summary_layout.addRow("Total Repaid to You:", self.summary_labels['loan_repaid'])
         summary_layout.addRow("<b>Remaining to Collect:</b>", self.summary_labels['loan_remaining'])
-        summary_layout.addRow(QLabel()) # Spacer
-        summary_layout.addRow(QLabel("---"))
+        summary_layout.addRow(QLabel())
         summary_layout.addRow("<h2>Net Financial Position:</h2>", self.summary_labels['net_position'])
+
+        # Charts stacked vertically on the right
+        charts_container = QWidget()
+        charts_layout = QVBoxLayout(charts_container)
+        charts_layout.setContentsMargins(0, 0, 0, 0)
+        charts_layout.setSpacing(5)
 
         self.pie_chart_canvas = self.create_pie_chart()
         self.bar_chart_canvas = self.create_bar_chart()
         self.line_chart_canvas = self.create_line_chart()
 
-        grid_layout.addWidget(summary_container, 0, 0)
-        grid_layout.addWidget(self.pie_chart_canvas, 0, 1)
-        grid_layout.addWidget(self.bar_chart_canvas, 0, 2)
-        grid_layout.addWidget(self.line_chart_canvas, 1, 0, 1, 3)
-        grid_layout.setColumnStretch(0, 2)
-        grid_layout.setColumnStretch(1, 1)
-        grid_layout.setColumnStretch(2, 1)
+        # Top charts side by side
+        top_charts_layout = QHBoxLayout()
+        top_charts_layout.setSpacing(5)
+        top_charts_layout.addWidget(self.pie_chart_canvas)
+        top_charts_layout.addWidget(self.bar_chart_canvas)
+        charts_layout.addLayout(top_charts_layout, 1)
+
+        top_layout.addWidget(summary_container, 2)
+        top_layout.addWidget(charts_container, 3)
+        main_layout.addLayout(top_layout, 2)
+
+        # --- Bottom: Line chart spanning full width ---
+        main_layout.addWidget(self.line_chart_canvas, 1)
         return widget
     
     def create_pie_chart(self):
         fig, self.pie_ax = plt.subplots(facecolor='#2e3440')
         self.pie_ax.set_facecolor('#2e3440')
-        fig.subplots_adjust(left=0.1, right=0.75, top=0.9, bottom=0.1)
+        fig.subplots_adjust(left=0.05, right=0.70, top=0.88, bottom=0.05)
         return FigureCanvas(fig)
 
     def create_bar_chart(self):
         fig, self.bar_ax = plt.subplots(facecolor='#2e3440')
         self.bar_ax.set_facecolor('#2e3440')
-        fig.subplots_adjust(left=0.15, right=0.95, top=0.9, bottom=0.25)
+        fig.subplots_adjust(left=0.18, right=0.95, top=0.88, bottom=0.30)
         return FigureCanvas(fig)
 
     def create_line_chart(self):
         fig, self.line_ax = plt.subplots(facecolor='#2e3440')
         self.line_ax.set_facecolor('#2e3440')
-        fig.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.2)
+        fig.subplots_adjust(left=0.08, right=0.97, top=0.90, bottom=0.20)
         return FigureCanvas(fig)
 
     def _create_details_panel_widgets(self):
