@@ -334,9 +334,49 @@ class MainWindow(QMainWindow):
         
         self.create_menu_bar()
         self.create_tabs()
-        
+        self._setup_keyboard_shortcuts()
+
         self.tabs.currentChanged.connect(self.refresh_ui)
         self.refresh_ui()
+
+    def _setup_keyboard_shortcuts(self):
+        """Sets up application-wide keyboard shortcuts."""
+        # Tab navigation: Ctrl+1..4
+        for i in range(min(4, self.tabs.count())):
+            shortcut = QAction(self)
+            shortcut.setShortcut(QKeySequence(f"Ctrl+{i + 1}"))
+            shortcut.triggered.connect(lambda checked, idx=i: self.tabs.setCurrentIndex(idx))
+            self.addAction(shortcut)
+
+        # Delete key for selected items
+        delete_shortcut = QAction(self)
+        delete_shortcut.setShortcut(QKeySequence.StandardKey.Delete)
+        delete_shortcut.triggered.connect(self._handle_delete_key)
+        self.addAction(delete_shortcut)
+
+        # Ctrl+N for new entry
+        new_shortcut = QAction(self)
+        new_shortcut.setShortcut(QKeySequence("Ctrl+N"))
+        new_shortcut.triggered.connect(self._handle_new_shortcut)
+        self.addAction(new_shortcut)
+
+    def _handle_delete_key(self):
+        """Routes the Delete key to the correct delete action for the current tab."""
+        tab = self.tabs.currentIndex()
+        if tab == 1:
+            self.delete_entry()
+        elif tab == 2:
+            self.delete_entry()
+        elif tab == 3:
+            self.delete_journal_entry()
+
+    def _handle_new_shortcut(self):
+        """Routes Ctrl+N to the correct add action for the current tab."""
+        tab = self.tabs.currentIndex()
+        if tab in (1, 2):
+            self.add_entry()
+        elif tab == 3:
+            self.add_journal_entry()
 
     # --- UI Creation Methods ---
 
@@ -349,13 +389,22 @@ class MainWindow(QMainWindow):
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_and_refresh)
         export_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ArrowUp)), "Export All to CSV", self)
+        export_action.setShortcut(QKeySequence("Ctrl+E"))
         export_action.triggered.connect(self.export_all_data)
         api_key_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)), "Set API Key...", self)
         api_key_action.triggered.connect(self.show_api_key_dialog)
         clear_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)), "Clear All Data...", self)
         clear_action.triggered.connect(self.clear_all_data)
+        backup_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)), "Backup Data...", self)
+        backup_action.triggered.connect(self.backup_data)
+        restore_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton)), "Restore from Backup...", self)
+        restore_action.triggered.connect(self.restore_data)
+
         file_menu.addAction(save_action)
         file_menu.addAction(export_action)
+        file_menu.addSeparator()
+        file_menu.addAction(backup_action)
+        file_menu.addAction(restore_action)
         file_menu.addSeparator()
         file_menu.addAction(api_key_action)
         file_menu.addSeparator()
@@ -363,8 +412,10 @@ class MainWindow(QMainWindow):
 
         tools_menu = menu_bar.addMenu("Tools")
         snowball_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward)), "Debt Payoff Strategy", self)
+        snowball_action.setShortcut(QKeySequence("Ctrl+D"))
         snowball_action.triggered.connect(self.show_debt_snowball)
         whatif_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)), "What-If Calculator", self)
+        whatif_action.setShortcut(QKeySequence("Ctrl+W"))
         whatif_action.triggered.connect(self.show_what_if_calc)
         networth_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton)), "Log Net Position Snapshot", self)
         networth_action.triggered.connect(self.log_net_position)
@@ -491,12 +542,17 @@ class MainWindow(QMainWindow):
         trans_header_layout = QHBoxLayout()
         trans_label = QLabel("Transactions")
         trans_label.setStyleSheet("font-size: 12pt; margin-top: 15px;")
+        widgets['edit_transaction_btn'] = QPushButton(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)), "")
+        widgets['edit_transaction_btn'].setToolTip("Edit Selected Transaction")
+        widgets['edit_transaction_btn'].setEnabled(False)
+        widgets['edit_transaction_btn'].clicked.connect(self.edit_transaction)
         widgets['delete_transaction_btn'] = QPushButton(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)), "")
         widgets['delete_transaction_btn'].setToolTip("Delete Selected Transaction")
         widgets['delete_transaction_btn'].setEnabled(False)
         widgets['delete_transaction_btn'].clicked.connect(self.delete_transaction)
         trans_header_layout.addWidget(trans_label)
         trans_header_layout.addStretch()
+        trans_header_layout.addWidget(widgets['edit_transaction_btn'])
         trans_header_layout.addWidget(widgets['delete_transaction_btn'])
         layout.addLayout(trans_header_layout)
 
@@ -513,15 +569,19 @@ class MainWindow(QMainWindow):
         add_btn = QPushButton("Add Entry")
         add_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileIcon)))
         add_btn.clicked.connect(self.add_entry)
+        dup_btn = QPushButton("Duplicate")
+        dup_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)))
+        dup_btn.clicked.connect(self.duplicate_entry)
         edit_btn = QPushButton("Edit Entry")
         edit_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
         edit_btn.clicked.connect(self.edit_entry)
         delete_btn = QPushButton("Delete Entry")
         delete_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)))
         delete_btn.clicked.connect(self.delete_entry)
-        
+
         crud_layout.addStretch()
         crud_layout.addWidget(add_btn)
+        crud_layout.addWidget(dup_btn)
         crud_layout.addWidget(edit_btn)
         crud_layout.addWidget(delete_btn)
         layout.addLayout(crud_layout)
@@ -696,7 +756,7 @@ class MainWindow(QMainWindow):
         width = 0.35
         self.bar_ax.bar(x - width / 2, totals, width, label='Total Incurred/Loaned', color='#d08770')
         self.bar_ax.bar(x + width / 2, paids, width, label='Total Paid/Repaid', color='#a3be8c')
-        self.bar_ax.set_ylabel('Amount ($)', color='white')
+        self.bar_ax.set_ylabel('Amount (AUD)', color='white')
         self.bar_ax.set_xticks(x, categories)
         self.bar_ax.legend(labelcolor='white', facecolor='#3b4252', edgecolor='#4c566a', bbox_to_anchor=(0.5, -0.1), loc='upper center')
         self.bar_chart_canvas.draw()
@@ -862,14 +922,16 @@ class MainWindow(QMainWindow):
         self.edit_journal_btn.setEnabled(has_selection)
     
     def on_transaction_selection_changed(self):
-        """Enables the delete button for the correct tab's transaction list."""
+        """Enables edit/delete buttons for the correct tab's transaction list."""
         tab_index = self.tabs.currentIndex()
         if tab_index == 1:
             is_selected = bool(self.ledger_widgets['transaction_list'].currentItem())
             self.ledger_widgets['delete_transaction_btn'].setEnabled(is_selected)
+            self.ledger_widgets['edit_transaction_btn'].setEnabled(is_selected)
         elif tab_index == 2:
             is_selected = bool(self.history_widgets['transaction_list'].currentItem())
             self.history_widgets['delete_transaction_btn'].setEnabled(is_selected)
+            self.history_widgets['edit_transaction_btn'].setEnabled(is_selected)
 
     # --- Core App Logic / "CRUD" Actions ---
 
@@ -896,6 +958,20 @@ class MainWindow(QMainWindow):
             self.update_entry_status(entry)
             self.save_and_refresh()
             
+    def duplicate_entry(self):
+        entry = self.get_selected_entry()
+        if not entry:
+            QMessageBox.warning(self, "No Selection", "Please select an entry to duplicate.")
+            return
+        self.ledger_manager.add_entry(
+            label=f"{entry.label} (Copy)",
+            amount=entry.amount,
+            entry_type=entry.entry_type,
+            comments=entry.comments,
+            tags=list(entry.tags),
+        )
+        self.save_and_refresh()
+
     def delete_entry(self):
         entry = self.get_selected_entry()
         if not entry:
@@ -923,6 +999,27 @@ class MainWindow(QMainWindow):
                 **dialog.transaction_data
             )
             self.update_entry_status(entry)
+            self.save_and_refresh()
+
+    def edit_transaction(self):
+        tab_index = self.tabs.currentIndex()
+        if tab_index == 1:
+            item = self.ledger_widgets['transaction_list'].currentItem()
+        elif tab_index == 2:
+            item = self.history_widgets['transaction_list'].currentItem()
+        else:
+            return
+        if not item:
+            return
+
+        trans = item.data(Qt.ItemDataRole.UserRole)
+        dialog = TransactionDialog(transaction_data={'label': trans.label, 'amount': trans.amount}, parent=self)
+        if dialog.exec():
+            trans.label = dialog.transaction_data['label']
+            trans.amount = dialog.transaction_data['amount']
+            entry = self.get_selected_entry()
+            if entry:
+                self.update_entry_status(entry)
             self.save_and_refresh()
 
     def delete_transaction(self):
@@ -1168,10 +1265,21 @@ class MainWindow(QMainWindow):
     # --- Helper & Utility Methods ---
 
     def update_entry_status(self, entry: LedgerEntry):
-        """Updates an entry's status based on its balance."""
+        """Updates an entry's status based on its balance. Shows celebration on payoff."""
         balance = calculate_balance_for_entry(entry, self.transaction_manager.get_all_transactions())
         if balance <= 0 and entry.status == 'active':
             entry.status = 'paid'
+            entry_type = "debt" if entry.entry_type == 'debt' else "loan"
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Fully Paid Off!")
+            msg.setTextFormat(Qt.TextFormat.RichText)
+            msg.setText(
+                f"<h2>Congratulations!</h2>"
+                f"<p><b>{entry.label}</b> (${entry.amount:,.2f}) has been fully settled!</p>"
+                f"<p>This {entry_type} has been moved to your <b>History</b> tab.</p>"
+            )
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.exec()
         elif balance > 0 and entry.status == 'paid':
             entry.status = 'active'
     
@@ -1225,6 +1333,40 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Export Successful", f"Data successfully exported to:\n{path}")
             except Exception as e:
                 QMessageBox.critical(self, "Export Failed", f"An error occurred: {e}")
+
+    def backup_data(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save Backup", "finance_board_backup.json", "JSON Files (*.json)")
+        if path:
+            if self.storage_manager.create_manual_backup(path):
+                QMessageBox.information(self, "Backup Successful", f"Data backed up to:\n{path}")
+            else:
+                QMessageBox.critical(self, "Backup Failed", "Could not create the backup file.")
+
+    def restore_data(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Restore from Backup", "", "JSON Files (*.json)")
+        if not path:
+            return
+        reply = QMessageBox.warning(self, "Confirm Restore",
+                                    "This will replace ALL current data with the backup.\n"
+                                    "Your current data will be auto-backed up first.\n\nContinue?",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        if self.storage_manager.restore_from_backup(path):
+            # Reload all data from the restored file
+            all_data = self.storage_manager.load_data()
+            from Backend.core.ledger_manager import LedgerEntry
+            from Backend.core.transaction_manager import Transaction
+            from Backend.core.journal_manager import JournalEntry
+            from Backend.core.net_worth_manager import NetWorthSnapshot
+            self.ledger_manager.entries = [LedgerEntry.from_dict(d) for d in all_data.get("ledger_entries", [])]
+            self.transaction_manager.transactions = [Transaction.from_dict(t) for t in all_data.get("transactions", [])]
+            self.journal_manager.entries = [JournalEntry.from_dict(j) for j in all_data.get("journal_entries", [])]
+            self.net_worth_manager.snapshots = [NetWorthSnapshot.from_dict(n) for n in all_data.get("net_worth_snapshots", [])]
+            self.refresh_ui()
+            QMessageBox.information(self, "Restore Successful", "Data has been restored from the backup.")
+        else:
+            QMessageBox.critical(self, "Restore Failed", "The selected file is not a valid Finance Board backup.")
 
     def show_api_key_dialog(self, is_first_run=False):
         current_key = self.config.get("OPENROUTER_API_KEY", "")

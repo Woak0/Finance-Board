@@ -219,6 +219,8 @@ if __name__ == "__main__":
     config = load_config()
     
     storage = StorageManager()
+    storage.create_auto_backup()
+
     ledger_manager = LedgerManager()
     transaction_manager = TransactionManager()
     journal_manager = JournalManager()
