@@ -30,7 +30,6 @@ class NetWorthManager:
     def add_snapshot(self, net_position: float):
         snapshot = NetWorthSnapshot(net_position=net_position)
         self.snapshots.append(snapshot)
-        print(f"Net worth snapshot of ${net_position:,.2f} recorded.")
         return snapshot
 
     def get_all_snapshots(self) -> list[NetWorthSnapshot]:

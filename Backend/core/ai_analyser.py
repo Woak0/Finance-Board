@@ -14,7 +14,7 @@ class FinancialAnalyser:
             "parser": "mistralai/mistral-7b-instruct:free", 
             "analyst": "mistralai/mistral-7b-instruct:free", 
         }
-        print("AI Analyser initialised.")
+        pass
 
     def _call_ai(self, system_prompt: str, user_prompt: str, model_key: str = "analyst", is_json_mode: bool = False) -> str:
         """Private helper to call the external AI API with a separated prompt and specified model."""
@@ -40,7 +40,6 @@ class FinancialAnalyser:
             data["response_format"] = {"type": "json_object"}
 
         try:
-            print(f"Contacting AI assistant (using model: {data['model']})...")
             response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=90)
             response.raise_for_status()
             response_json = response.json()
@@ -62,7 +61,7 @@ class FinancialAnalyser:
         total_debt_balance = sum(calculate_balance_for_entry(d, all_transactions) for d in debt_entries)
         total_loan_balance = sum(calculate_balance_for_entry(l, all_transactions) for l in loan_entries)
         
-        context_parts.append(f"### Overall Financial Snapshot\n- Total Debt Owed: ${total_debt_balance:,.2f}\n- Total Owed to You (Loans): ${total_loan_balance:,.2f}\n")
+        context_parts.append(f"### Overall Financial Snapshot (AUD)\n- Total Debt Owed: ${total_debt_balance:,.2f}\n- Total Owed to You (Loans): ${total_loan_balance:,.2f}\n")
 
         if all_entries:
             context_parts.append("### Detailed Ledger Entries")
@@ -95,7 +94,7 @@ class FinancialAnalyser:
             return self._call_ai(system_prompt, user_prompt)
 
         system_prompt = """
-        You are a professional, encouraging, and detail-oriented financial analyst based in Australia. Your primary directive is to analyze the user's financial data and provide a concise, structured 'Financial Health Check'.
+        You are a professional, encouraging, and detail-oriented financial analyst based in Australia. All amounts are in AUD. Your primary directive is to analyze the user's financial data and provide a concise, structured 'Financial Health Check'.
 
         **Core Directives:**
         1.  **NEVER Invent Data:** Base your entire analysis STRICTLY on the data provided in the user's context.
@@ -116,7 +115,7 @@ class FinancialAnalyser:
         """Answers a specific user question with their financial data as context. Now much smarter."""
         
         system_prompt = """
-        You are an expert financial Q&A assistant from Australia. Your primary goal is to be helpful and accurate.
+        You are an expert financial Q&A assistant from Australia. All amounts are in AUD. Your primary goal is to be helpful and accurate.
 
         **Core Directives:**
         1.  **Answer from Context:** You MUST answer the user's question based ONLY on the "Current Financial Context" provided. This context includes pre-calculated totals.
@@ -180,5 +179,4 @@ class FinancialAnalyser:
         try:
             return json.loads(ai_response_str)
         except json.JSONDecodeError:
-            print(f"DEBUG: AI returned non-JSON response: {ai_response_str}")
             return {"commands": [{"action": "unknown", "payload": {"reason": "AI failed to generate a valid command."}}]}

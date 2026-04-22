@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QAction, QFont, QKeySequence, QIcon
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 import copy
+from datetime import datetime, timezone
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
@@ -189,7 +190,6 @@ class AiChatDialog(QDialog):
         self.input_line.setPlaceholderText("Ask a question...")
         self.input_line.returnPressed.connect(self.send_message)
         send_btn = QPushButton("Send")
-        send_btn.setIcon(QIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowRight)))
         send_btn.clicked.connect(self.send_message)
         input_layout.addWidget(self.input_line)
         input_layout.addWidget(send_btn)
@@ -234,7 +234,6 @@ class AiPlanEditorDialog(QDialog):
         
         btn_layout = QHBoxLayout()
         edit_btn = QPushButton("Edit Selected")
-        edit_btn.setIcon(QIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
         edit_btn.clicked.connect(self.edit_selected_command)
         
         btn_layout.addStretch()
@@ -322,21 +321,68 @@ class MainWindow(QMainWindow):
         for name, instance in managers.items():
             setattr(self, name, instance)
 
+        self._undo_stack = []  # List of (type, data) tuples for undo
+
         self.ai_analyser = FinancialAnalyser(api_key=self.config.get("OPENROUTER_API_KEY"))
         if not self.config.get("OPENROUTER_API_KEY"):
             self.show_api_key_dialog(is_first_run=True)
 
-        self.setWindowTitle("Finance Board")
-        self.setWindowIcon(QIcon("assets/icon.ico"))
+        self.setWindowTitle("Finance Board v2.0.0")
+        import sys, os
+        if getattr(sys, 'frozen', False):
+            icon_path = os.path.join(sys._MEIPASS, 'assets', 'icon.ico')
+        else:
+            icon_path = 'assets/icon.ico'
+        self.setWindowIcon(QIcon(icon_path))
         self.setMinimumSize(1200, 800)
         self.resize(1600, 1000)
         self.setStatusBar(QStatusBar(self))
         
         self.create_menu_bar()
         self.create_tabs()
-        
+        self._setup_keyboard_shortcuts()
+
         self.tabs.currentChanged.connect(self.refresh_ui)
         self.refresh_ui()
+
+    def _setup_keyboard_shortcuts(self):
+        """Sets up application-wide keyboard shortcuts."""
+        # Tab navigation: Ctrl+1..4
+        for i in range(min(4, self.tabs.count())):
+            shortcut = QAction(self)
+            shortcut.setShortcut(QKeySequence(f"Ctrl+{i + 1}"))
+            shortcut.triggered.connect(lambda checked, idx=i: self.tabs.setCurrentIndex(idx))
+            self.addAction(shortcut)
+
+        # Delete key for selected items
+        delete_shortcut = QAction(self)
+        delete_shortcut.setShortcut(QKeySequence.StandardKey.Delete)
+        delete_shortcut.triggered.connect(self._handle_delete_key)
+        self.addAction(delete_shortcut)
+
+        # Ctrl+N for new entry
+        new_shortcut = QAction(self)
+        new_shortcut.setShortcut(QKeySequence("Ctrl+N"))
+        new_shortcut.triggered.connect(self._handle_new_shortcut)
+        self.addAction(new_shortcut)
+
+    def _handle_delete_key(self):
+        """Routes the Delete key to the correct delete action for the current tab."""
+        tab = self.tabs.currentIndex()
+        if tab == 1:
+            self.delete_entry()
+        elif tab == 2:
+            self.delete_entry()
+        elif tab == 3:
+            self.delete_journal_entry()
+
+    def _handle_new_shortcut(self):
+        """Routes Ctrl+N to the correct add action for the current tab."""
+        tab = self.tabs.currentIndex()
+        if tab in (1, 2):
+            self.add_entry()
+        elif tab == 3:
+            self.add_journal_entry()
 
     # --- UI Creation Methods ---
 
@@ -349,28 +395,51 @@ class MainWindow(QMainWindow):
         save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_and_refresh)
         export_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ArrowUp)), "Export All to CSV", self)
+        export_action.setShortcut(QKeySequence("Ctrl+E"))
         export_action.triggered.connect(self.export_all_data)
         api_key_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)), "Set API Key...", self)
         api_key_action.triggered.connect(self.show_api_key_dialog)
         clear_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)), "Clear All Data...", self)
         clear_action.triggered.connect(self.clear_all_data)
+        backup_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)), "Backup Data...", self)
+        backup_action.triggered.connect(self.backup_data)
+        restore_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton)), "Restore from Backup...", self)
+        restore_action.triggered.connect(self.restore_data)
+
         file_menu.addAction(save_action)
         file_menu.addAction(export_action)
+        file_menu.addSeparator()
+        file_menu.addAction(backup_action)
+        file_menu.addAction(restore_action)
         file_menu.addSeparator()
         file_menu.addAction(api_key_action)
         file_menu.addSeparator()
         file_menu.addAction(clear_action)
 
+        edit_menu = menu_bar.addMenu("Edit")
+        self.undo_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ArrowBack)), "Undo Last Delete", self)
+        self.undo_action.setShortcut(QKeySequence.StandardKey.Undo)
+        self.undo_action.setEnabled(False)
+        self.undo_action.triggered.connect(self.undo_last_delete)
+        edit_menu.addAction(self.undo_action)
+
         tools_menu = menu_bar.addMenu("Tools")
         snowball_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_MediaSeekForward)), "Debt Payoff Strategy", self)
+        snowball_action.setShortcut(QKeySequence("Ctrl+D"))
         snowball_action.triggered.connect(self.show_debt_snowball)
         whatif_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)), "What-If Calculator", self)
+        whatif_action.setShortcut(QKeySequence("Ctrl+W"))
         whatif_action.triggered.connect(self.show_what_if_calc)
-        networth_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton)), "Log Net Worth Snapshot", self)
-        networth_action.triggered.connect(self.log_net_worth)
+        networth_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton)), "Log Net Position Snapshot", self)
+        networth_action.triggered.connect(self.log_net_position)
+        monthly_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogListView)), "Monthly Payment Summary", self)
+        monthly_action.setShortcut(QKeySequence("Ctrl+M"))
+        monthly_action.triggered.connect(self.show_monthly_summary)
         tools_menu.addAction(snowball_action)
         tools_menu.addAction(whatif_action)
         tools_menu.addAction(networth_action)
+        tools_menu.addSeparator()
+        tools_menu.addAction(monthly_action)
 
         ai_menu = menu_bar.addMenu("AI Tools")
         health_check_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)), "Get Financial Health Check", self)
@@ -386,80 +455,168 @@ class MainWindow(QMainWindow):
     def create_tabs(self):
         self.tabs = QTabWidget()
         self.setCentralWidget(self.tabs)
-        self.tabs.addTab(self.create_dashboard_tab(), "Dashboard")
-        self.tabs.addTab(self.create_ledger_tab(), "Ledger & Transactions")
-        self.tabs.addTab(self.create_history_tab(), "History")
-        self.tabs.addTab(self.create_journal_tab(), "Journal")
+        self.tabs.addTab(self.create_dashboard_tab(), "  Dashboard  ")
+        self.tabs.addTab(self.create_ledger_tab(), "  Ledger  ")
+        self.tabs.addTab(self.create_history_tab(), "  History  ")
+        self.tabs.addTab(self.create_journal_tab(), "  Journal  ")
+
+    def _make_card(self, title_text=None):
+        """Creates a styled card frame for dashboard sections."""
+        card = QFrame()
+        card.setObjectName("DashCard")
+        card.setFrameShape(QFrame.Shape.StyledPanel)
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(14, 10, 14, 10)
+        layout.setSpacing(4)
+        if title_text:
+            t = QLabel(title_text)
+            t.setObjectName("CardTitle")
+            layout.addWidget(t)
+        return card, layout
 
     def create_dashboard_tab(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         widget = QWidget()
         main_layout = QVBoxLayout(widget)
-        title = QLabel("Finance Board Dashboard")
-        title.setObjectName("Header")
-        main_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignHCenter)
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(16, 10, 16, 10)
 
-        grid_layout = QGridLayout()
-        main_layout.addLayout(grid_layout)
+        # ===== ROW 1: KPI Cards =====
+        cards_row = QHBoxLayout()
+        cards_row.setSpacing(8)
 
-        summary_container = QWidget()
-        summary_layout = QFormLayout(summary_container)
+        self.stats_cards = {}
+        card_defs = [
+            ('active_debts', 'ACTIVE DEBTS', '#bf616a'),
+            ('paid_this_month', 'PAID THIS MONTH', '#a3be8c'),
+            ('biggest_debt', 'BIGGEST REMAINING', '#d08770'),
+            ('entries_paid_off', 'SETTLED', '#a3be8c'),
+            ('net_position_card', 'NET POSITION', '#88c0d0'),
+        ]
+        for key, label, accent in card_defs:
+            card, cl = self._make_card(label)
+            card.setStyleSheet(f"""
+                QFrame#DashCard {{
+                    background-color: #3b4252;
+                    border: 1px solid #434c5e;
+                    border-radius: 10px;
+                    border-left: 3px solid {accent};
+                }}
+                QFrame#DashCard:hover {{
+                    border-color: {accent};
+                    border-left: 3px solid {accent};
+                    background-color: #3d4556;
+                }}
+            """)
+            v = QLabel("--")
+            v.setObjectName("CardValue")
+            v.setStyleSheet(f"color: {accent};")
+            cl.addWidget(v)
+            cl.addStretch()
+            self.stats_cards[key] = v
+            cards_row.addWidget(card, 1)
+
+        # Quick payment card
+        qp_card, qp_layout = self._make_card("QUICK PAYMENT")
+        qp_card.setStyleSheet("""
+            QFrame#DashCard {
+                background-color: #3b4252;
+                border: 1px solid #434c5e;
+                border-radius: 10px;
+                border-left: 3px solid #5e81ac;
+            }
+            QFrame#DashCard:hover {
+                border-color: #5e81ac;
+                border-left: 3px solid #5e81ac;
+                background-color: #3d4556;
+            }
+        """)
+        self.quick_add_combo = QComboBox()
+        self.quick_add_btn = QPushButton("Add Payment")
+        self.quick_add_btn.setObjectName("PrimaryBtn")
+        self.quick_add_btn.clicked.connect(self.quick_add_payment)
+        qp_layout.addWidget(self.quick_add_combo)
+        qp_layout.addWidget(self.quick_add_btn)
+        cards_row.addWidget(qp_card, 2)
+
+        main_layout.addLayout(cards_row)
+
+        # ===== ROW 2: Summary + Pie + Bar =====
+        mid_row = QHBoxLayout()
+        mid_row.setSpacing(8)
+
+        # Summary card
+        sum_card, sum_layout = self._make_card()
         self.summary_labels = {
             'debt_incurred': QLabel(), 'debt_paid': QLabel(), 'debt_remaining': QLabel(), 'debt_eta': QLabel(),
-            'loan_out': QLabel(), 'loan_repaid': QLabel(), 'loan_remaining': QLabel(), 'net_position': QLabel()
+            'loan_out': QLabel(), 'loan_repaid': QLabel(), 'loan_remaining': QLabel(),
         }
-        for label in self.summary_labels.values():
-            label.setFont(QFont("Segoe UI", 11))
-        self.summary_labels['net_position'].setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        
-        summary_layout.addRow(QLabel()) # Spacer
-        summary_layout.addRow(QLabel("<b>DEBTS (Money You Owe)</b>"))
-        summary_layout.addRow("Total Debt Incurred:", self.summary_labels['debt_incurred'])
-        summary_layout.addRow("Total Payments Made:", self.summary_labels['debt_paid'])
-        summary_layout.addRow("<b>Remaining Debt Balance:</b>", self.summary_labels['debt_remaining'])
-        summary_layout.addRow("<i>Est. Debt-Free Date:</i>", self.summary_labels['debt_eta'])
-        summary_layout.addRow(QLabel()) # Spacer
-        summary_layout.addRow(QLabel("<b>LOANS (Money Owed to You)</b>"))
-        summary_layout.addRow("Total Loaned Out:", self.summary_labels['loan_out'])
-        summary_layout.addRow("Total Repaid to You:", self.summary_labels['loan_repaid'])
-        summary_layout.addRow("<b>Remaining to Collect:</b>", self.summary_labels['loan_remaining'])
-        summary_layout.addRow(QLabel()) # Spacer
-        summary_layout.addRow(QLabel("---"))
-        summary_layout.addRow("<h2>Net Financial Position:</h2>", self.summary_labels['net_position'])
+        for lbl in self.summary_labels.values():
+            lbl.setFont(QFont("Segoe UI", 10))
+
+        form = QFormLayout()
+        form.setVerticalSpacing(3)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.addRow(QLabel("<b style='color:#bf616a'>DEBTS</b>"))
+        form.addRow("Incurred:", self.summary_labels['debt_incurred'])
+        form.addRow("Paid:", self.summary_labels['debt_paid'])
+        form.addRow("<b>Remaining:</b>", self.summary_labels['debt_remaining'])
+        form.addRow("<i>ETA:</i>", self.summary_labels['debt_eta'])
+        form.addRow(QLabel("<b style='color:#a3be8c'>LOANS</b>"))
+        form.addRow("Loaned:", self.summary_labels['loan_out'])
+        form.addRow("Repaid:", self.summary_labels['loan_repaid'])
+        form.addRow("<b>Collect:</b>", self.summary_labels['loan_remaining'])
+        sum_layout.addLayout(form)
+        sum_layout.addStretch()
 
         self.pie_chart_canvas = self.create_pie_chart()
         self.bar_chart_canvas = self.create_bar_chart()
         self.line_chart_canvas = self.create_line_chart()
 
-        grid_layout.addWidget(summary_container, 0, 0)
-        grid_layout.addWidget(self.pie_chart_canvas, 0, 1)
-        grid_layout.addWidget(self.bar_chart_canvas, 0, 2)
-        grid_layout.addWidget(self.line_chart_canvas, 1, 0, 1, 3)
-        grid_layout.setColumnStretch(0, 2)
-        grid_layout.setColumnStretch(1, 1)
-        grid_layout.setColumnStretch(2, 1)
-        return widget
+        pie_card, pie_layout = self._make_card()
+        pie_layout.setContentsMargins(2, 2, 2, 2)
+        pie_layout.addWidget(self.pie_chart_canvas)
+
+        bar_card, bar_layout = self._make_card()
+        bar_layout.setContentsMargins(2, 2, 2, 2)
+        bar_layout.addWidget(self.bar_chart_canvas)
+
+        mid_row.addWidget(sum_card, 2)
+        mid_row.addWidget(pie_card, 3)
+        mid_row.addWidget(bar_card, 3)
+        main_layout.addLayout(mid_row, 3)
+
+        # ===== ROW 3: Line chart =====
+        line_card, line_layout = self._make_card()
+        line_layout.setContentsMargins(4, 4, 4, 4)
+        line_layout.addWidget(self.line_chart_canvas)
+        main_layout.addWidget(line_card, 4)
+
+        scroll.setWidget(widget)
+        return scroll
     
     def create_pie_chart(self):
-        fig, self.pie_ax = plt.subplots(facecolor='#2e3440')
-        self.pie_ax.set_facecolor('#2e3440')
-        plt.subplots_adjust(left=0.1, right=0.75, top=0.9, bottom=0.1)
+        fig, self.pie_ax = plt.subplots(facecolor='#3b4252')
+        self.pie_ax.set_facecolor('#3b4252')
+        fig.subplots_adjust(left=0.05, right=0.70, top=0.88, bottom=0.05)
         return FigureCanvas(fig)
 
     def create_bar_chart(self):
-        fig, self.bar_ax = plt.subplots(facecolor='#2e3440')
-        self.bar_ax.set_facecolor('#2e3440')
-        plt.subplots_adjust(left=0.15, right=0.95, top=0.9, bottom=0.25)
+        fig, self.bar_ax = plt.subplots(facecolor='#3b4252')
+        self.bar_ax.set_facecolor('#3b4252')
+        fig.subplots_adjust(left=0.18, right=0.95, top=0.88, bottom=0.30)
         return FigureCanvas(fig)
 
     def create_line_chart(self):
-        fig, self.line_ax = plt.subplots(facecolor='#2e3440')
-        self.line_ax.set_facecolor('#2e3440')
-        plt.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.2)
+        fig, self.line_ax = plt.subplots(facecolor='#3b4252')
+        self.line_ax.set_facecolor('#3b4252')
+        fig.subplots_adjust(left=0.08, right=0.97, top=0.90, bottom=0.18)
         return FigureCanvas(fig)
 
     def _create_details_panel_widgets(self):
         """Factory method to create a reusable details panel."""
-        s = self.style()
         container = QWidget()
         layout = QVBoxLayout(container)
         widgets = {}
@@ -467,22 +624,33 @@ class MainWindow(QMainWindow):
         widgets['detail_label'] = QLabel("No item selected")
         widgets['detail_label'].setObjectName("SubHeader")
         widgets['detail_balance'] = QLabel()
+        widgets['progress_bar'] = QProgressBar()
+        widgets['progress_bar'].setTextVisible(True)
+        widgets['progress_bar'].setFormat("%p% paid off")
+        widgets['progress_bar'].setVisible(False)
         widgets['detail_info'] = QLabel()
         widgets['detail_info'].setWordWrap(True)
         widgets['detail_info'].setAlignment(Qt.AlignmentFlag.AlignTop)
         layout.addWidget(widgets['detail_label'])
         layout.addWidget(widgets['detail_balance'])
+        layout.addWidget(widgets['progress_bar'])
         layout.addWidget(widgets['detail_info'])
 
         trans_header_layout = QHBoxLayout()
         trans_label = QLabel("Transactions")
         trans_label.setStyleSheet("font-size: 12pt; margin-top: 15px;")
-        widgets['delete_transaction_btn'] = QPushButton(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)), "")
+        widgets['edit_transaction_btn'] = QPushButton("Edit")
+        widgets['edit_transaction_btn'].setToolTip("Edit Selected Transaction")
+        widgets['edit_transaction_btn'].setEnabled(False)
+        widgets['edit_transaction_btn'].clicked.connect(self.edit_transaction)
+        widgets['delete_transaction_btn'] = QPushButton("Delete")
+        widgets['delete_transaction_btn'].setObjectName("DangerBtn")
         widgets['delete_transaction_btn'].setToolTip("Delete Selected Transaction")
         widgets['delete_transaction_btn'].setEnabled(False)
         widgets['delete_transaction_btn'].clicked.connect(self.delete_transaction)
         trans_header_layout.addWidget(trans_label)
         trans_header_layout.addStretch()
+        trans_header_layout.addWidget(widgets['edit_transaction_btn'])
         trans_header_layout.addWidget(widgets['delete_transaction_btn'])
         layout.addLayout(trans_header_layout)
 
@@ -490,24 +658,32 @@ class MainWindow(QMainWindow):
         widgets['transaction_list'].currentItemChanged.connect(self.on_transaction_selection_changed)
         layout.addWidget(widgets['transaction_list'], 1)
 
+        payment_btn_layout = QHBoxLayout()
         widgets['add_payment_btn'] = QPushButton("Add Payment")
-        widgets['add_payment_btn'].setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)))
+        widgets['add_payment_btn'].setObjectName("SuccessBtn")
         widgets['add_payment_btn'].clicked.connect(self.add_transaction)
-        layout.addWidget(widgets['add_payment_btn'])
+        widgets['use_template_btn'] = QPushButton("Use Template")
+        widgets['use_template_btn'].clicked.connect(self.use_transaction_template)
+        widgets['use_template_btn'].setEnabled(False)
+        payment_btn_layout.addWidget(widgets['add_payment_btn'])
+        payment_btn_layout.addWidget(widgets['use_template_btn'])
+        layout.addLayout(payment_btn_layout)
 
         crud_layout = QHBoxLayout()
         add_btn = QPushButton("Add Entry")
-        add_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileIcon)))
+        add_btn.setObjectName("PrimaryBtn")
         add_btn.clicked.connect(self.add_entry)
+        dup_btn = QPushButton("Duplicate")
+        dup_btn.clicked.connect(self.duplicate_entry)
         edit_btn = QPushButton("Edit Entry")
-        edit_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogResetButton)))
         edit_btn.clicked.connect(self.edit_entry)
         delete_btn = QPushButton("Delete Entry")
-        delete_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)))
+        delete_btn.setObjectName("DangerBtn")
         delete_btn.clicked.connect(self.delete_entry)
-        
+
         crud_layout.addStretch()
         crud_layout.addWidget(add_btn)
+        crud_layout.addWidget(dup_btn)
         crud_layout.addWidget(edit_btn)
         crud_layout.addWidget(delete_btn)
         layout.addLayout(crud_layout)
@@ -517,14 +693,34 @@ class MainWindow(QMainWindow):
     def create_ledger_tab(self):
         widget = QWidget()
         layout = QHBoxLayout(widget)
-        
+
         list_container = QWidget()
         list_layout = QVBoxLayout(list_container)
         list_layout.addWidget(QLabel("<b>Active Debts & Loans</b>"))
+
+        # Search bar
+        self.ledger_search = QLineEdit()
+        self.ledger_search.setPlaceholderText("Search entries...")
+        self.ledger_search.setClearButtonEnabled(True)
+        self.ledger_search.textChanged.connect(self.refresh_ledger_list)
+        list_layout.addWidget(self.ledger_search)
+
+        # Filter and sort controls
+        filter_sort_layout = QHBoxLayout()
+        self.ledger_filter = QComboBox()
+        self.ledger_filter.addItems(["All Types", "Debts Only", "Loans Only"])
+        self.ledger_filter.currentIndexChanged.connect(self.refresh_ledger_list)
+        self.ledger_sort = QComboBox()
+        self.ledger_sort.addItems(["Sort: A-Z", "Sort: Z-A", "Balance (Low)", "Balance (High)", "Date (Newest)", "Date (Oldest)"])
+        self.ledger_sort.currentIndexChanged.connect(self.refresh_ledger_list)
+        filter_sort_layout.addWidget(self.ledger_filter)
+        filter_sort_layout.addWidget(self.ledger_sort)
+        list_layout.addLayout(filter_sort_layout)
+
         self.active_list_widget = QListWidget()
         self.active_list_widget.currentItemChanged.connect(self.on_active_list_selection)
         list_layout.addWidget(self.active_list_widget)
-        
+
         self.ledger_details_panel, self.ledger_widgets = self._create_details_panel_widgets()
 
         layout.addWidget(list_container, 1)
@@ -550,31 +746,60 @@ class MainWindow(QMainWindow):
         return widget
 
     def create_journal_tab(self):
-        s = self.style()
         widget = QWidget()
-        layout = QVBoxLayout(widget)
-        title = QLabel("Financial Journal")
-        title.setObjectName("Header")
-        layout.addWidget(title)
-        
+        main_layout = QHBoxLayout(widget)
+
+        # --- Left panel: Notebooks ---
+        notebook_panel = QWidget()
+        notebook_layout = QVBoxLayout(notebook_panel)
+        notebook_layout.addWidget(QLabel("<b>Notebooks</b>"))
+
+        self.notebook_list = QListWidget()
+        self.notebook_list.currentItemChanged.connect(self.on_notebook_selection_changed)
+        notebook_layout.addWidget(self.notebook_list, 1)
+
+        nb_btn_layout = QHBoxLayout()
+        add_nb_btn = QPushButton("New Notebook")
+        add_nb_btn.clicked.connect(self.add_notebook)
+        self.rename_nb_btn = QPushButton("Rename")
+        self.rename_nb_btn.clicked.connect(self.rename_notebook)
+        self.rename_nb_btn.setEnabled(False)
+        nb_btn_layout.addWidget(add_nb_btn)
+        nb_btn_layout.addWidget(self.rename_nb_btn)
+        notebook_layout.addLayout(nb_btn_layout)
+
+        # --- Right panel: Entries ---
+        entry_panel = QWidget()
+        entry_layout = QVBoxLayout(entry_panel)
+        self.journal_header = QLabel("Financial Journal")
+        self.journal_header.setObjectName("Header")
+        entry_layout.addWidget(self.journal_header)
+
         self.journal_list = QListWidget()
         self.journal_list.setWordWrap(True)
         self.journal_list.currentItemChanged.connect(self.on_journal_selection_changed)
-        layout.addWidget(self.journal_list, 1)
-        
+        entry_layout.addWidget(self.journal_list, 1)
+
         btn_layout = QHBoxLayout()
         add_btn = QPushButton("Add Entry")
-        add_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileLinkIcon)))
+        add_btn.setObjectName("PrimaryBtn")
         add_btn.clicked.connect(self.add_journal_entry)
-        self.delete_journal_btn = QPushButton("Delete Selected Entry")
-        self.delete_journal_btn.setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_TrashIcon)))
+        self.edit_journal_btn = QPushButton("Edit Selected")
+        self.edit_journal_btn.clicked.connect(self.edit_journal_entry)
+        self.edit_journal_btn.setEnabled(False)
+        self.delete_journal_btn = QPushButton("Delete Selected")
+        self.delete_journal_btn.setObjectName("DangerBtn")
         self.delete_journal_btn.clicked.connect(self.delete_journal_entry)
         self.delete_journal_btn.setEnabled(False)
-        
+
         btn_layout.addStretch()
         btn_layout.addWidget(add_btn)
+        btn_layout.addWidget(self.edit_journal_btn)
         btn_layout.addWidget(self.delete_journal_btn)
-        layout.addLayout(btn_layout)
+        entry_layout.addLayout(btn_layout)
+
+        main_layout.addWidget(notebook_panel, 1)
+        main_layout.addWidget(entry_panel, 3)
         return widget
 
     # --- UI Refresh & Update Logic ---
@@ -609,14 +834,17 @@ class MainWindow(QMainWindow):
         total_paid = calculate_total_transaction_amount([t for t in all_transactions if t.transaction_type == 'payment'])
         total_repaid = calculate_total_transaction_amount([t for t in all_transactions if t.transaction_type == 'repayment'])
         
-        self.summary_labels['debt_incurred'].setText(f"${total_debt:,.2f}")
-        self.summary_labels['debt_paid'].setText(f"${total_paid:,.2f}")
-        self.summary_labels['debt_remaining'].setText(f"${debt_balance:,.2f}")
+        self.summary_labels['debt_incurred'].setText(f"<span style='color:#bf616a'>${total_debt:,.2f}</span>")
+        self.summary_labels['debt_paid'].setText(f"<span style='color:#a3be8c'>${total_paid:,.2f}</span>")
+        self.summary_labels['debt_remaining'].setText(f"<span style='color:#bf616a'>${debt_balance:,.2f}</span>")
         self.summary_labels['debt_eta'].setText(calculate_overall_eta(debt_entries, [t for t in all_transactions if t.transaction_type == 'payment']))
         self.summary_labels['loan_out'].setText(f"${total_loaned:,.2f}")
-        self.summary_labels['loan_repaid'].setText(f"${total_repaid:,.2f}")
+        self.summary_labels['loan_repaid'].setText(f"<span style='color:#a3be8c'>${total_repaid:,.2f}</span>")
         self.summary_labels['loan_remaining'].setText(f"${loan_balance:,.2f}")
-        self.summary_labels['net_position'].setText(f"${net_position:,.2f}")
+        # Net position goes to the KPI card
+        net_color = '#a3be8c' if net_position >= 0 else '#bf616a'
+        self.stats_cards['net_position_card'].setText(f"${net_position:,.2f}")
+        self.stats_cards['net_position_card'].setStyleSheet(f"color: {net_color}; font-size: 13pt; font-weight: bold;")
 
         self.pie_ax.clear()
         self.pie_ax.set_title('Debt vs. Loans Balance', color='white')
@@ -648,13 +876,13 @@ class MainWindow(QMainWindow):
         width = 0.35
         self.bar_ax.bar(x - width / 2, totals, width, label='Total Incurred/Loaned', color='#d08770')
         self.bar_ax.bar(x + width / 2, paids, width, label='Total Paid/Repaid', color='#a3be8c')
-        self.bar_ax.set_ylabel('Amount ($)', color='white')
+        self.bar_ax.set_ylabel('Amount (AUD)', color='white')
         self.bar_ax.set_xticks(x, categories)
         self.bar_ax.legend(labelcolor='white', facecolor='#3b4252', edgecolor='#4c566a', bbox_to_anchor=(0.5, -0.1), loc='upper center')
         self.bar_chart_canvas.draw()
         
         self.line_ax.clear()
-        self.line_ax.set_title('Net Worth Over Time', color='white')
+        self.line_ax.set_title('Net Position Over Time', color='white')
         self.line_ax.tick_params(axis='x', colors='white')
         self.line_ax.tick_params(axis='y', colors='white')
         self.line_ax.spines['bottom'].set_color('#d8dee9')
@@ -663,29 +891,109 @@ class MainWindow(QMainWindow):
         self.line_ax.spines['right'].set_color('#2e3440')
         snapshots = self.net_worth_manager.get_all_snapshots()
         if len(snapshots) > 1:
-            dates = [s.date_recorded for s in snapshots]
-            values = [s.net_position for s in snapshots]
-            self.line_ax.plot(dates, values, marker='o', color='#88c0d0')
-            self.line_ax.figure.autofmt_xdate()
+            # Filter outliers: remove points >10x the median absolute value
+            all_values = [s.net_position for s in snapshots]
+            abs_vals = sorted([abs(v) for v in all_values if v != 0])
+            if abs_vals:
+                median_abs = abs_vals[len(abs_vals) // 2]
+                threshold = max(median_abs * 10, 50000)  # at least 50k to avoid filtering real data
+                filtered = [(s.date_recorded, s.net_position) for s in snapshots if abs(s.net_position) <= threshold]
+            else:
+                filtered = [(s.date_recorded, s.net_position) for s in snapshots]
+
+            if len(filtered) > 1:
+                dates, values = zip(*filtered)
+                self.line_ax.plot(dates, values, marker='o', color='#88c0d0', linewidth=2, markersize=5)
+                self.line_ax.fill_between(dates, values, alpha=0.1, color='#88c0d0')
+                self.line_ax.figure.autofmt_xdate()
+            else:
+                self.line_ax.text(0.5, 0.5, 'Not enough data to chart', ha='center', va='center', color='gray')
         else:
-            self.line_ax.text(0.5, 0.5, 'Log at least two snapshots to see a trend', ha='center', va='center', color='gray')
+            self.line_ax.text(0.5, 0.5, 'At least two snapshots needed to see a trend', ha='center', va='center', color='gray')
         self.line_chart_canvas.draw()
+
+        # --- Quick-stats cards ---
+        active_debts = [e for e in debt_entries if e.status == 'active']
+        self.stats_cards['active_debts'].setText(str(len(active_debts)))
+
+        # Paid this month
+        now = datetime.now(timezone.utc)
+        month_transactions = [t for t in all_transactions
+                              if t.date_paid.year == now.year and t.date_paid.month == now.month]
+        paid_this_month = sum(t.amount for t in month_transactions)
+        self.stats_cards['paid_this_month'].setText(f"${paid_this_month:,.2f}")
+
+        # Biggest remaining debt
+        if active_debts:
+            biggest = max(active_debts, key=lambda e: calculate_balance_for_entry(e, all_transactions))
+            biggest_bal = calculate_balance_for_entry(biggest, all_transactions)
+            self.stats_cards['biggest_debt'].setText(f"{biggest.label[:15]}\n${biggest_bal:,.2f}")
+        else:
+            self.stats_cards['biggest_debt'].setText("None!")
+
+        # Settled entries count
+        paid_entries = [e for e in all_entries if e.status == 'paid']
+        self.stats_cards['entries_paid_off'].setText(str(len(paid_entries)))
+
+        # --- Quick-add payment dropdown ---
+        self.quick_add_combo.clear()
+        active_entries = [e for e in all_entries if e.status == 'active']
+        for entry in sorted(active_entries, key=lambda e: e.label):
+            balance = calculate_balance_for_entry(entry, all_transactions)
+            self.quick_add_combo.addItem(f"{entry.label} (${balance:,.2f})", entry)
+        self.quick_add_btn.setEnabled(bool(active_entries))
 
     def refresh_ledger_list(self):
         current_id = self.get_selected_entry_id()
         self.active_list_widget.clear()
         selected_item_to_restore = None
-        
-        sorted_entries = sorted(self.ledger_manager.get_all_entries(), key=lambda e: e.label or '')
-        
-        for entry in sorted_entries:
-            if entry.status == 'active':
-                item = QListWidgetItem(f"{entry.label}")
-                item.setData(Qt.ItemDataRole.UserRole, entry)
-                self.active_list_widget.addItem(item)
-                if entry and current_id and entry.id == current_id:
-                    selected_item_to_restore = item
-                    
+
+        all_transactions = self.transaction_manager.get_all_transactions()
+
+        # Filter active entries
+        entries = [e for e in self.ledger_manager.get_all_entries() if e.status == 'active']
+
+        # Apply type filter
+        filter_idx = self.ledger_filter.currentIndex() if hasattr(self, 'ledger_filter') else 0
+        if filter_idx == 1:
+            entries = [e for e in entries if e.entry_type == 'debt']
+        elif filter_idx == 2:
+            entries = [e for e in entries if e.entry_type == 'loan']
+
+        # Apply search
+        search_text = self.ledger_search.text().strip().lower() if hasattr(self, 'ledger_search') else ""
+        if search_text:
+            entries = [e for e in entries if search_text in e.label.lower() or
+                       any(search_text in tag.lower() for tag in e.tags) or
+                       (e.comments and search_text in e.comments.lower())]
+
+        # Pre-calculate balances for sorting
+        entry_balances = {e.id: calculate_balance_for_entry(e, all_transactions) for e in entries}
+
+        # Apply sort
+        sort_idx = self.ledger_sort.currentIndex() if hasattr(self, 'ledger_sort') else 0
+        if sort_idx == 0:
+            entries.sort(key=lambda e: (e.label or '').lower())
+        elif sort_idx == 1:
+            entries.sort(key=lambda e: (e.label or '').lower(), reverse=True)
+        elif sort_idx == 2:
+            entries.sort(key=lambda e: entry_balances[e.id])
+        elif sort_idx == 3:
+            entries.sort(key=lambda e: entry_balances[e.id], reverse=True)
+        elif sort_idx == 4:
+            entries.sort(key=lambda e: e.date_incurred, reverse=True)
+        elif sort_idx == 5:
+            entries.sort(key=lambda e: e.date_incurred)
+
+        for entry in entries:
+            balance = entry_balances[entry.id]
+            type_icon = "\u25B2" if entry.entry_type == 'loan' else "\u25BC"
+            item = QListWidgetItem(f"{type_icon}  {entry.label}    ${balance:,.2f}")
+            item.setData(Qt.ItemDataRole.UserRole, entry)
+            self.active_list_widget.addItem(item)
+            if entry and current_id and entry.id == current_id:
+                selected_item_to_restore = item
+
         if selected_item_to_restore:
             self.active_list_widget.setCurrentItem(selected_item_to_restore)
         else:
@@ -698,9 +1006,11 @@ class MainWindow(QMainWindow):
 
         sorted_entries = sorted(self.ledger_manager.get_all_entries(), key=lambda e: e.label or '')
 
+        all_transactions = self.transaction_manager.get_all_transactions()
         for entry in sorted_entries:
             if entry.status == 'paid':
-                item = QListWidgetItem(f"{entry.label}")
+                type_label = "Loan" if entry.entry_type == 'loan' else "Debt"
+                item = QListWidgetItem(f"\u2713  {entry.label}  ({type_label} - ${entry.amount:,.2f})")
                 item.setData(Qt.ItemDataRole.UserRole, entry)
                 self.history_list_widget.addItem(item)
                 if entry and current_id and entry.id == current_id:
@@ -712,13 +1022,46 @@ class MainWindow(QMainWindow):
             self._update_details_panel(None, self.history_widgets)
 
     def refresh_journal_list(self):
+        # Refresh notebook list
+        current_notebook = None
+        if self.notebook_list.currentItem():
+            current_notebook = self.notebook_list.currentItem().text()
+
+        self.notebook_list.clear()
+        notebooks = self.journal_manager.get_notebooks()
+        if not notebooks:
+            notebooks = ["General"]
+
+        notebook_to_select = None
+        for nb in notebooks:
+            item = QListWidgetItem(nb)
+            self.notebook_list.addItem(item)
+            if nb == current_notebook:
+                notebook_to_select = item
+
+        if notebook_to_select:
+            self.notebook_list.setCurrentItem(notebook_to_select)
+        elif self.notebook_list.count() > 0:
+            self.notebook_list.setCurrentRow(0)
+
+        self._refresh_journal_entries()
+
+    def _refresh_journal_entries(self):
+        """Refreshes the journal entry list based on the selected notebook."""
         current_id = self.get_selected_journal_id()
         self.journal_list.clear()
-        if not self.journal_manager.get_all_entries():
-            self.delete_journal_btn.setEnabled(False)
+        self.delete_journal_btn.setEnabled(False)
+        self.edit_journal_btn.setEnabled(False)
+
+        selected_notebook = self.notebook_list.currentItem()
+        if not selected_notebook:
             return
-            
-        for entry in self.journal_manager.get_all_entries():
+
+        notebook_name = selected_notebook.text()
+        self.journal_header.setText(f"Journal - {notebook_name}")
+        entries = self.journal_manager.get_entries_by_notebook(notebook_name)
+
+        for entry in entries:
             item = QListWidgetItem(f"{entry.date_created.strftime('%Y-%m-%d %H:%M')}\n{entry.content}")
             item.setData(Qt.ItemDataRole.UserRole, entry)
             self.journal_list.addItem(item)
@@ -729,21 +1072,33 @@ class MainWindow(QMainWindow):
         """A generic function to update a details panel, given an entry and a dict of widgets."""
         widgets['transaction_list'].clear()
         widgets['delete_transaction_btn'].setEnabled(False)
+        widgets['edit_transaction_btn'].setEnabled(False)
 
         if entry:
             widgets['add_payment_btn'].setEnabled(entry.status == 'active')
             widgets['add_payment_btn'].setText(f"Add {'Payment' if entry.entry_type == 'debt' else 'Repayment'}")
-            
+            widgets['use_template_btn'].setEnabled(entry.status == 'active' and bool(self.config.get('transaction_templates')))
+
             balance = calculate_balance_for_entry(entry, self.transaction_manager.get_all_transactions())
             widgets['detail_label'].setText(entry.label)
             widgets['detail_balance'].setText(f"<b>Current Balance: ${balance:,.2f}</b>")
+
+            # Progress bar
+            if entry.amount > 0:
+                paid_pct = max(0, min(100, int(((entry.amount - balance) / entry.amount) * 100)))
+                widgets['progress_bar'].setValue(paid_pct)
+                widgets['progress_bar'].setVisible(True)
+            else:
+                widgets['progress_bar'].setVisible(False)
+
             widgets['detail_info'].setText(
                 f"<b>Type:</b> {entry.entry_type.capitalize()}<br>"
                 f"<b>Status:</b> {entry.status.capitalize()}<br>"
+                f"<b>Original Amount:</b> ${entry.amount:,.2f}<br>"
                 f"<b>Tags:</b> {', '.join(entry.tags) if entry.tags else 'None'}<br>"
                 f"<b>Comments:</b> {entry.comments or 'None'}"
             )
-            
+
             transactions = self.transaction_manager.get_transactions_for_entry(entry.id)
             for t in sorted(transactions, key=lambda t: t.date_paid, reverse=True):
                 item = QListWidgetItem(f"{t.date_paid.strftime('%Y-%m-%d')} - {t.label} (${t.amount:,.2f})")
@@ -753,7 +1108,9 @@ class MainWindow(QMainWindow):
             widgets['detail_label'].setText("No item selected")
             widgets['detail_balance'].setText("")
             widgets['detail_info'].setText("")
+            widgets['progress_bar'].setVisible(False)
             widgets['add_payment_btn'].setEnabled(False)
+            widgets['use_template_btn'].setEnabled(False)
 
     # --- Event Handlers / Slots ---
 
@@ -765,18 +1122,27 @@ class MainWindow(QMainWindow):
         entry = current.data(Qt.ItemDataRole.UserRole) if current else None
         self._update_details_panel(entry, self.history_widgets)
 
+    def on_notebook_selection_changed(self, current, previous):
+        self._refresh_journal_entries()
+        can_rename = bool(current) and current.text() != "General"
+        self.rename_nb_btn.setEnabled(can_rename)
+
     def on_journal_selection_changed(self):
-        self.delete_journal_btn.setEnabled(bool(self.journal_list.currentItem()))
+        has_selection = bool(self.journal_list.currentItem())
+        self.delete_journal_btn.setEnabled(has_selection)
+        self.edit_journal_btn.setEnabled(has_selection)
     
     def on_transaction_selection_changed(self):
-        """Enables the delete button for the correct tab's transaction list."""
+        """Enables edit/delete buttons for the correct tab's transaction list."""
         tab_index = self.tabs.currentIndex()
         if tab_index == 1:
             is_selected = bool(self.ledger_widgets['transaction_list'].currentItem())
             self.ledger_widgets['delete_transaction_btn'].setEnabled(is_selected)
+            self.ledger_widgets['edit_transaction_btn'].setEnabled(is_selected)
         elif tab_index == 2:
             is_selected = bool(self.history_widgets['transaction_list'].currentItem())
             self.history_widgets['delete_transaction_btn'].setEnabled(is_selected)
+            self.history_widgets['edit_transaction_btn'].setEnabled(is_selected)
 
     # --- Core App Logic / "CRUD" Actions ---
 
@@ -803,6 +1169,20 @@ class MainWindow(QMainWindow):
             self.update_entry_status(entry)
             self.save_and_refresh()
             
+    def duplicate_entry(self):
+        entry = self.get_selected_entry()
+        if not entry:
+            QMessageBox.warning(self, "No Selection", "Please select an entry to duplicate.")
+            return
+        self.ledger_manager.add_entry(
+            label=f"{entry.label} (Copy)",
+            amount=entry.amount,
+            entry_type=entry.entry_type,
+            comments=entry.comments,
+            tags=list(entry.tags),
+        )
+        self.save_and_refresh()
+
     def delete_entry(self):
         entry = self.get_selected_entry()
         if not entry:
@@ -812,6 +1192,12 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(self, "Confirm Delete", f"Delete '{entry.label}' and all its transactions?", 
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            # Save to undo stack before deleting
+            related_transactions = self.transaction_manager.get_transactions_for_entry(entry.id)
+            self._undo_stack = [('entry', entry, related_transactions)]
+            self.undo_action.setEnabled(True)
+            self.undo_action.setText(f"Undo Delete '{entry.label}'")
+
             self.ledger_manager.delete_entry_by_id(entry.id)
             self.transaction_manager.delete_transactions_by_entry_id(entry.id)
             self.save_and_refresh()
@@ -820,16 +1206,80 @@ class MainWindow(QMainWindow):
         entry = self.get_selected_entry()
         if not entry:
             return
-            
+
         dialog = TransactionDialog(parent=self)
         if dialog.exec():
             trans_type = "payment" if entry.entry_type == 'debt' else 'repayment'
             self.transaction_manager.add_transaction(
-                entry_id=entry.id, 
-                transaction_type=trans_type, 
+                entry_id=entry.id,
+                transaction_type=trans_type,
                 **dialog.transaction_data
             )
             self.update_entry_status(entry)
+            self.save_and_refresh()
+
+            # Offer to save as template
+            reply = QMessageBox.question(self, "Save Template?",
+                f"Save this as a recurring template?\n\n"
+                f"Label: {dialog.transaction_data['label']}\n"
+                f"Amount: ${dialog.transaction_data['amount']:,.2f}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                templates = self.config.get('transaction_templates', [])
+                templates.append({
+                    'label': dialog.transaction_data['label'],
+                    'amount': dialog.transaction_data['amount'],
+                })
+                self.config['transaction_templates'] = templates
+                save_config(self.config)
+
+    def use_transaction_template(self):
+        entry = self.get_selected_entry()
+        if not entry:
+            return
+
+        templates = self.config.get('transaction_templates', [])
+        if not templates:
+            QMessageBox.information(self, "No Templates", "No saved templates yet. Add a transaction first and choose to save it as a template.")
+            return
+
+        # Show template picker
+        items = [f"{t['label']} (${t['amount']:,.2f})" for t in templates]
+        chosen, ok = QInputDialog.getItem(self, "Select Template", "Choose a template:", items, 0, False)
+        if not ok:
+            return
+
+        idx = items.index(chosen)
+        template = templates[idx]
+        trans_type = "payment" if entry.entry_type == 'debt' else 'repayment'
+        self.transaction_manager.add_transaction(
+            entry_id=entry.id,
+            transaction_type=trans_type,
+            label=template['label'],
+            amount=template['amount'],
+        )
+        self.update_entry_status(entry)
+        self.save_and_refresh()
+
+    def edit_transaction(self):
+        tab_index = self.tabs.currentIndex()
+        if tab_index == 1:
+            item = self.ledger_widgets['transaction_list'].currentItem()
+        elif tab_index == 2:
+            item = self.history_widgets['transaction_list'].currentItem()
+        else:
+            return
+        if not item:
+            return
+
+        trans = item.data(Qt.ItemDataRole.UserRole)
+        dialog = TransactionDialog(transaction_data={'label': trans.label, 'amount': trans.amount}, parent=self)
+        if dialog.exec():
+            trans.label = dialog.transaction_data['label']
+            trans.amount = dialog.transaction_data['amount']
+            entry = self.get_selected_entry()
+            if entry:
+                self.update_entry_status(entry)
             self.save_and_refresh()
 
     def delete_transaction(self):
@@ -850,15 +1300,32 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(self, "Confirm Delete", f"Delete transaction '{trans.label}'?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            self._undo_stack = [('transaction', trans)]
+            self.undo_action.setEnabled(True)
+            self.undo_action.setText(f"Undo Delete '{trans.label}'")
+
             self.transaction_manager.delete_transaction_by_id(trans.id)
             if entry:
                 self.update_entry_status(entry)
             self.save_and_refresh()
 
     def add_journal_entry(self):
-        text, ok = QInputDialog.getMultiLineText(self, "New Journal Entry", "Enter your thoughts or notes:")
+        notebook = "General"
+        if self.notebook_list.currentItem():
+            notebook = self.notebook_list.currentItem().text()
+        text, ok = QInputDialog.getMultiLineText(self, "New Journal Entry", f"New entry in '{notebook}':")
         if ok and text:
-            self.journal_manager.add_entry(text)
+            self.journal_manager.add_entry(text, notebook=notebook)
+            self.save_and_refresh()
+
+    def edit_journal_entry(self):
+        item = self.journal_list.currentItem()
+        if not item:
+            return
+        entry = item.data(Qt.ItemDataRole.UserRole)
+        text, ok = QInputDialog.getMultiLineText(self, "Edit Journal Entry", "Edit your entry:", entry.content)
+        if ok and text:
+            entry.content = text
             self.save_and_refresh()
 
     def delete_journal_entry(self):
@@ -870,7 +1337,45 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(self, "Confirm Delete", "Delete this journal entry?",
                                      QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if reply == QMessageBox.StandardButton.Yes:
+            self._undo_stack = [('journal', entry)]
+            self.undo_action.setEnabled(True)
+            self.undo_action.setText("Undo Delete Journal Entry")
             self.journal_manager.delete_entry_by_id(entry.id)
+            self.save_and_refresh()
+
+    def add_notebook(self):
+        name, ok = QInputDialog.getText(self, "New Notebook", "Notebook name:")
+        if ok and name and name.strip():
+            name = name.strip()
+            existing = self.journal_manager.get_notebooks()
+            if name in existing:
+                QMessageBox.warning(self, "Duplicate", f"A notebook named '{name}' already exists.")
+                return
+            # Create an empty entry to establish the notebook, then immediately delete it
+            # Actually, just add a placeholder - better UX is to just select it and let user add entries
+            # We'll create a dummy entry approach won't work. Instead, just add an entry directly.
+            # Simplest: create the notebook by adding an entry to it
+            text, text_ok = QInputDialog.getMultiLineText(self, "First Entry", f"Add the first entry to '{name}':")
+            if text_ok and text:
+                self.journal_manager.add_entry(text, notebook=name)
+                self.save_and_refresh()
+                # Select the new notebook
+                for i in range(self.notebook_list.count()):
+                    if self.notebook_list.item(i).text() == name:
+                        self.notebook_list.setCurrentRow(i)
+                        break
+
+    def rename_notebook(self):
+        current_item = self.notebook_list.currentItem()
+        if not current_item or current_item.text() == "General":
+            return
+        old_name = current_item.text()
+        new_name, ok = QInputDialog.getText(self, "Rename Notebook", "New name:", text=old_name)
+        if ok and new_name and new_name.strip() and new_name.strip() != old_name:
+            new_name = new_name.strip()
+            for entry in self.journal_manager.entries:
+                if entry.notebook == old_name:
+                    entry.notebook = new_name
             self.save_and_refresh()
 
     # --- AI-Specific Methods ---
@@ -980,6 +1485,69 @@ class MainWindow(QMainWindow):
 
     # --- Tool Actions ---
     
+    def show_monthly_summary(self):
+        """Shows a monthly breakdown of payments made."""
+        all_transactions = self.transaction_manager.get_all_transactions()
+        if not all_transactions:
+            QMessageBox.information(self, "Monthly Summary", "No transactions recorded yet.")
+            return
+
+        # Group by month
+        monthly = {}
+        for t in all_transactions:
+            key = t.date_paid.strftime("%Y-%m")
+            if key not in monthly:
+                monthly[key] = {'payments': 0.0, 'repayments': 0.0, 'count': 0}
+            monthly[key]['count'] += 1
+            if t.transaction_type == 'payment':
+                monthly[key]['payments'] += t.amount
+            else:
+                monthly[key]['repayments'] += t.amount
+
+        # Build report
+        lines = ["<h3>Monthly Payment Summary</h3><table style='width:100%'>"]
+        lines.append("<tr><th style='text-align:left'>Month</th><th style='text-align:right'>Payments</th>"
+                     "<th style='text-align:right'>Repayments</th><th style='text-align:right'>Total</th>"
+                     "<th style='text-align:right'>#</th></tr>")
+
+        for month in sorted(monthly.keys(), reverse=True):
+            data = monthly[month]
+            total = data['payments'] + data['repayments']
+            lines.append(
+                f"<tr><td>{month}</td>"
+                f"<td style='text-align:right; color:#bf616a'>${data['payments']:,.2f}</td>"
+                f"<td style='text-align:right; color:#a3be8c'>${data['repayments']:,.2f}</td>"
+                f"<td style='text-align:right'><b>${total:,.2f}</b></td>"
+                f"<td style='text-align:right'>{data['count']}</td></tr>"
+            )
+        lines.append("</table>")
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Monthly Payment Summary")
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText("\n".join(lines))
+        msg.setMinimumWidth(500)
+        msg.exec()
+
+    def quick_add_payment(self):
+        """Quick-add a payment from the dashboard dropdown."""
+        if self.quick_add_combo.currentIndex() < 0:
+            return
+        entry = self.quick_add_combo.currentData()
+        if not entry:
+            return
+
+        dialog = TransactionDialog(parent=self)
+        if dialog.exec():
+            trans_type = "payment" if entry.entry_type == 'debt' else 'repayment'
+            self.transaction_manager.add_transaction(
+                entry_id=entry.id,
+                transaction_type=trans_type,
+                **dialog.transaction_data
+            )
+            self.update_entry_status(entry)
+            self.save_and_refresh()
+
     def show_debt_snowball(self):
         active_debts = [e for e in self.ledger_manager.get_all_entries() if e.entry_type == 'debt' and e.status == 'active']
         if not active_debts:
@@ -1003,28 +1571,61 @@ class MainWindow(QMainWindow):
             eta_string = calculate_what_if_eta(self.ledger_manager.get_all_entries(), self.transaction_manager.get_all_transactions(), dialog.amount)
             QMessageBox.information(self, "What-If Result", eta_string)
 
-    def log_net_worth(self):
+    def log_net_position(self):
+        """Manually log a net position snapshot (also happens automatically on save)."""
+        self._record_net_position_snapshot()
+        net_pos = self.net_worth_manager.get_all_snapshots()[0].net_position
+        QMessageBox.information(self, "Snapshot Logged", f"Net position snapshot logged: ${net_pos:,.2f}")
+        self.save_and_refresh()
+
+    def _record_net_position_snapshot(self):
+        """Auto-records a net position snapshot if it has changed since the last one."""
         all_e = self.ledger_manager.get_all_entries()
         all_t = self.transaction_manager.get_all_transactions()
         debt_bal = sum(calculate_balance_for_entry(e, all_t) for e in all_e if e.entry_type == 'debt')
         loan_bal = sum(calculate_balance_for_entry(e, all_t) for e in all_e if e.entry_type == 'loan')
         net_pos = loan_bal - debt_bal
+
+        snapshots = self.net_worth_manager.get_all_snapshots()
+
+        # Skip if unchanged
+        if snapshots and abs(snapshots[0].net_position - net_pos) < 0.01:
+            return
+
+        # Outlier guard: if change is >10x the median absolute value, skip recording
+        if len(snapshots) >= 3:
+            values = [abs(s.net_position) for s in snapshots if s.net_position != 0]
+            if values:
+                median_val = sorted(values)[len(values) // 2]
+                if median_val > 0 and abs(net_pos) > median_val * 10:
+                    return
+
         self.net_worth_manager.add_snapshot(net_pos)
-        QMessageBox.information(self, "Net Worth Logged", f"Successfully logged a new net worth snapshot of ${net_pos:,.2f}.")
-        self.save_and_refresh()
 
     # --- Helper & Utility Methods ---
 
     def update_entry_status(self, entry: LedgerEntry):
-        """Updates an entry's status based on its balance."""
+        """Updates an entry's status based on its balance. Shows celebration on payoff."""
         balance = calculate_balance_for_entry(entry, self.transaction_manager.get_all_transactions())
         if balance <= 0 and entry.status == 'active':
             entry.status = 'paid'
+            entry_type = "debt" if entry.entry_type == 'debt' else "loan"
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Fully Paid Off!")
+            msg.setTextFormat(Qt.TextFormat.RichText)
+            msg.setText(
+                f"<h2>Congratulations!</h2>"
+                f"<p><b>{entry.label}</b> (${entry.amount:,.2f}) has been fully settled!</p>"
+                f"<p>This {entry_type} has been moved to your <b>History</b> tab.</p>"
+            )
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.exec()
         elif balance > 0 and entry.status == 'paid':
             entry.status = 'active'
     
     def save_and_refresh(self):
-        """Saves all data to disk, refreshes the UI, and shows a status message."""
+        """Saves all data to disk, auto-logs net position, refreshes the UI."""
+        self._record_net_position_snapshot()
         self.storage_manager.save_data(self.ledger_manager, self.transaction_manager, self.journal_manager, self.net_worth_manager)
         self.refresh_ui()
         self.statusBar().showMessage("Data Saved!", 2000)
@@ -1052,6 +1653,35 @@ class MainWindow(QMainWindow):
         item = self.journal_list.currentItem()
         return item.data(Qt.ItemDataRole.UserRole).id if item else None
 
+    def undo_last_delete(self):
+        if not self._undo_stack:
+            return
+        undo_item = self._undo_stack.pop()
+        undo_type = undo_item[0]
+
+        if undo_type == 'entry':
+            entry = undo_item[1]
+            transactions = undo_item[2]
+            self.ledger_manager.entries.append(entry)
+            self.transaction_manager.transactions.extend(transactions)
+            self.statusBar().showMessage(f"Restored '{entry.label}' and {len(transactions)} transaction(s)", 3000)
+        elif undo_type == 'transaction':
+            trans = undo_item[1]
+            self.transaction_manager.transactions.append(trans)
+            # Re-check parent entry status
+            parent = self.ledger_manager.get_entry_by_id(trans.entry_id)
+            if parent:
+                self.update_entry_status(parent)
+            self.statusBar().showMessage(f"Restored transaction '{trans.label}'", 3000)
+        elif undo_type == 'journal':
+            journal_entry = undo_item[1]
+            self.journal_manager.entries.append(journal_entry)
+            self.statusBar().showMessage("Restored journal entry", 3000)
+
+        self.undo_action.setEnabled(bool(self._undo_stack))
+        self.undo_action.setText("Undo Last Delete")
+        self.save_and_refresh()
+
     def clear_all_data(self):
         reply = QMessageBox.critical(self, "Confirm Clear All Data",
                                      "WARNING: This will permanently delete ALL data. This action cannot be undone. Are you absolutely sure?",
@@ -1072,6 +1702,40 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(self, "Export Successful", f"Data successfully exported to:\n{path}")
             except Exception as e:
                 QMessageBox.critical(self, "Export Failed", f"An error occurred: {e}")
+
+    def backup_data(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save Backup", "finance_board_backup.json", "JSON Files (*.json)")
+        if path:
+            if self.storage_manager.create_manual_backup(path):
+                QMessageBox.information(self, "Backup Successful", f"Data backed up to:\n{path}")
+            else:
+                QMessageBox.critical(self, "Backup Failed", "Could not create the backup file.")
+
+    def restore_data(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Restore from Backup", "", "JSON Files (*.json)")
+        if not path:
+            return
+        reply = QMessageBox.warning(self, "Confirm Restore",
+                                    "This will replace ALL current data with the backup.\n"
+                                    "Your current data will be auto-backed up first.\n\nContinue?",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel)
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        if self.storage_manager.restore_from_backup(path):
+            # Reload all data from the restored file
+            all_data = self.storage_manager.load_data()
+            from Backend.core.ledger_manager import LedgerEntry
+            from Backend.core.transaction_manager import Transaction
+            from Backend.core.journal_manager import JournalEntry
+            from Backend.core.net_worth_manager import NetWorthSnapshot
+            self.ledger_manager.entries = [LedgerEntry.from_dict(d) for d in all_data.get("ledger_entries", [])]
+            self.transaction_manager.transactions = [Transaction.from_dict(t) for t in all_data.get("transactions", [])]
+            self.journal_manager.entries = [JournalEntry.from_dict(j) for j in all_data.get("journal_entries", [])]
+            self.net_worth_manager.snapshots = [NetWorthSnapshot.from_dict(n) for n in all_data.get("net_worth_snapshots", [])]
+            self.refresh_ui()
+            QMessageBox.information(self, "Restore Successful", "Data has been restored from the backup.")
+        else:
+            QMessageBox.critical(self, "Restore Failed", "The selected file is not a valid Finance Board backup.")
 
     def show_api_key_dialog(self, is_first_run=False):
         current_key = self.config.get("OPENROUTER_API_KEY", "")

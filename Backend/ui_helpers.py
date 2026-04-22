@@ -1,7 +1,7 @@
 from Backend.utils.validators import get_string_input, get_positive_float_input
 from Backend.core.ledger_manager import LedgerManager, LedgerEntry
 from Backend.core.transaction_manager import TransactionManager, Transaction
-from Backend.core.tag_manager import TagManager, handle_edit_tags_ui
+from Backend.core.tag_manager import TagManager
 from Backend.storage.storage_manager import StorageManager
 from Backend.core.export_manager import export_data_to_csv
 from Backend.core.journal_manager import JournalManager
@@ -14,6 +14,60 @@ storage_manager = StorageManager()
 ledger_manager = LedgerManager()
 transaction_manager = TransactionManager()
 tag_manager = TagManager()
+
+def handle_edit_tags_ui(item, tag_manager):
+    """Manages the CLI UI for editing tags on a ledger entry or transaction."""
+    while True:
+        current_tags_display = ", ".join(item.tags) if item.tags else "None"
+        print(f"\n--- Editing Tags for '{item.label}' ---")
+        print(f"  Current Tags: {current_tags_display}")
+        print("\n  [1] Add Standard Tag(s)")
+        print("  [2] Add Custom Tag(s)")
+        print("  [3] Remove a Tag")
+        print("  [c] Finish Editing Tags")
+
+        tag_choice = input("  Select an option: ")
+
+        if tag_choice == '1':
+            standard_tags = tag_manager.get_standard_tags()
+            for index, tag_name in enumerate(standard_tags):
+                print(f"    [{index + 1}] {tag_name}")
+            selection_input = input("    Enter numbers of tags to add, separated by commas: ")
+            if selection_input:
+                for num_str in selection_input.split(','):
+                    try:
+                        num = int(num_str.strip())
+                        if 1 <= num <= len(standard_tags):
+                            tag_to_add = standard_tags[num - 1]
+                            if tag_to_add not in item.tags:
+                                item.tags.append(tag_to_add)
+                        else:
+                            print(f"    Warning: Invalid number '{num}'.")
+                    except ValueError:
+                        print(f"    Warning: Invalid input '{num_str.strip()}'.")
+        elif tag_choice == '2':
+            custom_input = input("    Enter custom tags to add, separated by commas: ")
+            if custom_input:
+                for custom_tag in [t.strip() for t in custom_input.split(',')]:
+                    if custom_tag:
+                        formatted_tag = f"other:{custom_tag}"
+                        if formatted_tag not in item.tags:
+                            item.tags.append(formatted_tag)
+        elif tag_choice == '3':
+            if not item.tags:
+                print("    There are no tags to remove.")
+                continue
+            for index, tag_name in enumerate(item.tags):
+                print(f"    [{index + 1}] {tag_name}")
+            removal_input = input("    Enter number of the tag to remove: ")
+            try:
+                num = int(removal_input.strip())
+                if 1 <= num <= len(item.tags):
+                    item.tags.pop(num - 1)
+            except (ValueError, IndexError):
+                print("    Warning: Invalid input.")
+        elif tag_choice.lower() == 'c':
+            break
 
 def update_entry_status(entry: LedgerEntry, transaction_manager: TransactionManager):
     """Checks and updates an entry's status based on its balance."""
