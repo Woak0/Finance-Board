@@ -2,6 +2,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtGui import QAction, QFont, QKeySequence, QIcon
 from PyQt6.QtCore import Qt, QTimer
 import copy
+from datetime import datetime, timezone
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 import numpy as np
@@ -428,9 +429,14 @@ class MainWindow(QMainWindow):
         whatif_action.triggered.connect(self.show_what_if_calc)
         networth_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton)), "Log Net Position Snapshot", self)
         networth_action.triggered.connect(self.log_net_position)
+        monthly_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogListView)), "Monthly Payment Summary", self)
+        monthly_action.setShortcut(QKeySequence("Ctrl+M"))
+        monthly_action.triggered.connect(self.show_monthly_summary)
         tools_menu.addAction(snowball_action)
         tools_menu.addAction(whatif_action)
         tools_menu.addAction(networth_action)
+        tools_menu.addSeparator()
+        tools_menu.addAction(monthly_action)
 
         ai_menu = menu_bar.addMenu("AI Tools")
         health_check_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)), "Get Financial Health Check", self)
@@ -509,6 +515,44 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(charts_container, 3)
         main_layout.addLayout(top_layout, 2)
 
+        # --- Middle: Quick-stats cards + Quick-add payment ---
+        middle_layout = QHBoxLayout()
+        middle_layout.setSpacing(10)
+
+        # Quick-stats cards
+        self.stats_cards = {}
+        for key, label in [('active_debts', 'Active Debts'), ('paid_this_month', 'Paid This Month'),
+                           ('biggest_debt', 'Biggest Remaining'), ('entries_paid_off', 'Settled Entries')]:
+            card = QWidget()
+            card.setStyleSheet("background-color: #3b4252; border-radius: 8px; padding: 8px;")
+            card_layout = QVBoxLayout(card)
+            card_layout.setContentsMargins(12, 8, 12, 8)
+            title_lbl = QLabel(label)
+            title_lbl.setStyleSheet("color: #88c0d0; font-size: 9pt; font-weight: bold;")
+            value_lbl = QLabel("--")
+            value_lbl.setStyleSheet("font-size: 14pt; font-weight: bold;")
+            card_layout.addWidget(title_lbl)
+            card_layout.addWidget(value_lbl)
+            self.stats_cards[key] = value_lbl
+            middle_layout.addWidget(card)
+
+        # Quick-add payment button
+        quick_add_card = QWidget()
+        quick_add_card.setStyleSheet("background-color: #3b4252; border-radius: 8px; padding: 8px;")
+        quick_add_layout = QVBoxLayout(quick_add_card)
+        quick_add_layout.setContentsMargins(12, 8, 12, 8)
+        quick_add_title = QLabel("Quick Payment")
+        quick_add_title.setStyleSheet("color: #88c0d0; font-size: 9pt; font-weight: bold;")
+        self.quick_add_combo = QComboBox()
+        self.quick_add_btn = QPushButton("Add Payment")
+        self.quick_add_btn.clicked.connect(self.quick_add_payment)
+        quick_add_layout.addWidget(quick_add_title)
+        quick_add_layout.addWidget(self.quick_add_combo)
+        quick_add_layout.addWidget(self.quick_add_btn)
+        middle_layout.addWidget(quick_add_card)
+
+        main_layout.addLayout(middle_layout, 0)
+
         # --- Bottom: Line chart spanning full width ---
         main_layout.addWidget(self.line_chart_canvas, 1)
         return widget
@@ -578,10 +622,17 @@ class MainWindow(QMainWindow):
         widgets['transaction_list'].currentItemChanged.connect(self.on_transaction_selection_changed)
         layout.addWidget(widgets['transaction_list'], 1)
 
+        payment_btn_layout = QHBoxLayout()
         widgets['add_payment_btn'] = QPushButton("Add Payment")
         widgets['add_payment_btn'].setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)))
         widgets['add_payment_btn'].clicked.connect(self.add_transaction)
-        layout.addWidget(widgets['add_payment_btn'])
+        widgets['use_template_btn'] = QPushButton("Use Template")
+        widgets['use_template_btn'].setIcon(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogListView)))
+        widgets['use_template_btn'].clicked.connect(self.use_transaction_template)
+        widgets['use_template_btn'].setEnabled(False)
+        payment_btn_layout.addWidget(widgets['add_payment_btn'])
+        payment_btn_layout.addWidget(widgets['use_template_btn'])
+        layout.addLayout(payment_btn_layout)
 
         crud_layout = QHBoxLayout()
         add_btn = QPushButton("Add Entry")
@@ -817,6 +868,37 @@ class MainWindow(QMainWindow):
             self.line_ax.text(0.5, 0.5, 'At least two snapshots needed to see a trend', ha='center', va='center', color='gray')
         self.line_chart_canvas.draw()
 
+        # --- Quick-stats cards ---
+        active_debts = [e for e in debt_entries if e.status == 'active']
+        self.stats_cards['active_debts'].setText(str(len(active_debts)))
+
+        # Paid this month
+        now = datetime.now(timezone.utc)
+        month_transactions = [t for t in all_transactions
+                              if t.date_paid.year == now.year and t.date_paid.month == now.month]
+        paid_this_month = sum(t.amount for t in month_transactions)
+        self.stats_cards['paid_this_month'].setText(f"${paid_this_month:,.2f}")
+
+        # Biggest remaining debt
+        if active_debts:
+            biggest = max(active_debts, key=lambda e: calculate_balance_for_entry(e, all_transactions))
+            biggest_bal = calculate_balance_for_entry(biggest, all_transactions)
+            self.stats_cards['biggest_debt'].setText(f"{biggest.label[:15]}\n${biggest_bal:,.2f}")
+        else:
+            self.stats_cards['biggest_debt'].setText("None!")
+
+        # Settled entries count
+        paid_entries = [e for e in all_entries if e.status == 'paid']
+        self.stats_cards['entries_paid_off'].setText(str(len(paid_entries)))
+
+        # --- Quick-add payment dropdown ---
+        self.quick_add_combo.clear()
+        active_entries = [e for e in all_entries if e.status == 'active']
+        for entry in sorted(active_entries, key=lambda e: e.label):
+            balance = calculate_balance_for_entry(entry, all_transactions)
+            self.quick_add_combo.addItem(f"{entry.label} (${balance:,.2f})", entry)
+        self.quick_add_btn.setEnabled(bool(active_entries))
+
     def refresh_ledger_list(self):
         current_id = self.get_selected_entry_id()
         self.active_list_widget.clear()
@@ -951,6 +1033,7 @@ class MainWindow(QMainWindow):
         if entry:
             widgets['add_payment_btn'].setEnabled(entry.status == 'active')
             widgets['add_payment_btn'].setText(f"Add {'Payment' if entry.entry_type == 'debt' else 'Repayment'}")
+            widgets['use_template_btn'].setEnabled(entry.status == 'active' and bool(self.config.get('transaction_templates')))
 
             balance = calculate_balance_for_entry(entry, self.transaction_manager.get_all_transactions())
             widgets['detail_label'].setText(entry.label)
@@ -983,6 +1066,7 @@ class MainWindow(QMainWindow):
             widgets['detail_info'].setText("")
             widgets['progress_bar'].setVisible(False)
             widgets['add_payment_btn'].setEnabled(False)
+            widgets['use_template_btn'].setEnabled(False)
 
     # --- Event Handlers / Slots ---
 
@@ -1078,17 +1162,60 @@ class MainWindow(QMainWindow):
         entry = self.get_selected_entry()
         if not entry:
             return
-            
+
         dialog = TransactionDialog(parent=self)
         if dialog.exec():
             trans_type = "payment" if entry.entry_type == 'debt' else 'repayment'
             self.transaction_manager.add_transaction(
-                entry_id=entry.id, 
-                transaction_type=trans_type, 
+                entry_id=entry.id,
+                transaction_type=trans_type,
                 **dialog.transaction_data
             )
             self.update_entry_status(entry)
             self.save_and_refresh()
+
+            # Offer to save as template
+            reply = QMessageBox.question(self, "Save Template?",
+                f"Save this as a recurring template?\n\n"
+                f"Label: {dialog.transaction_data['label']}\n"
+                f"Amount: ${dialog.transaction_data['amount']:,.2f}",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                templates = self.config.get('transaction_templates', [])
+                templates.append({
+                    'label': dialog.transaction_data['label'],
+                    'amount': dialog.transaction_data['amount'],
+                })
+                self.config['transaction_templates'] = templates
+                save_config(self.config)
+
+    def use_transaction_template(self):
+        entry = self.get_selected_entry()
+        if not entry:
+            return
+
+        templates = self.config.get('transaction_templates', [])
+        if not templates:
+            QMessageBox.information(self, "No Templates", "No saved templates yet. Add a transaction first and choose to save it as a template.")
+            return
+
+        # Show template picker
+        items = [f"{t['label']} (${t['amount']:,.2f})" for t in templates]
+        chosen, ok = QInputDialog.getItem(self, "Select Template", "Choose a template:", items, 0, False)
+        if not ok:
+            return
+
+        idx = items.index(chosen)
+        template = templates[idx]
+        trans_type = "payment" if entry.entry_type == 'debt' else 'repayment'
+        self.transaction_manager.add_transaction(
+            entry_id=entry.id,
+            transaction_type=trans_type,
+            label=template['label'],
+            amount=template['amount'],
+        )
+        self.update_entry_status(entry)
+        self.save_and_refresh()
 
     def edit_transaction(self):
         tab_index = self.tabs.currentIndex()
@@ -1314,6 +1441,69 @@ class MainWindow(QMainWindow):
 
     # --- Tool Actions ---
     
+    def show_monthly_summary(self):
+        """Shows a monthly breakdown of payments made."""
+        all_transactions = self.transaction_manager.get_all_transactions()
+        if not all_transactions:
+            QMessageBox.information(self, "Monthly Summary", "No transactions recorded yet.")
+            return
+
+        # Group by month
+        monthly = {}
+        for t in all_transactions:
+            key = t.date_paid.strftime("%Y-%m")
+            if key not in monthly:
+                monthly[key] = {'payments': 0.0, 'repayments': 0.0, 'count': 0}
+            monthly[key]['count'] += 1
+            if t.transaction_type == 'payment':
+                monthly[key]['payments'] += t.amount
+            else:
+                monthly[key]['repayments'] += t.amount
+
+        # Build report
+        lines = ["<h3>Monthly Payment Summary</h3><table style='width:100%'>"]
+        lines.append("<tr><th style='text-align:left'>Month</th><th style='text-align:right'>Payments</th>"
+                     "<th style='text-align:right'>Repayments</th><th style='text-align:right'>Total</th>"
+                     "<th style='text-align:right'>#</th></tr>")
+
+        for month in sorted(monthly.keys(), reverse=True):
+            data = monthly[month]
+            total = data['payments'] + data['repayments']
+            lines.append(
+                f"<tr><td>{month}</td>"
+                f"<td style='text-align:right; color:#bf616a'>${data['payments']:,.2f}</td>"
+                f"<td style='text-align:right; color:#a3be8c'>${data['repayments']:,.2f}</td>"
+                f"<td style='text-align:right'><b>${total:,.2f}</b></td>"
+                f"<td style='text-align:right'>{data['count']}</td></tr>"
+            )
+        lines.append("</table>")
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Monthly Payment Summary")
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setText("\n".join(lines))
+        msg.setMinimumWidth(500)
+        msg.exec()
+
+    def quick_add_payment(self):
+        """Quick-add a payment from the dashboard dropdown."""
+        if self.quick_add_combo.currentIndex() < 0:
+            return
+        entry = self.quick_add_combo.currentData()
+        if not entry:
+            return
+
+        dialog = TransactionDialog(parent=self)
+        if dialog.exec():
+            trans_type = "payment" if entry.entry_type == 'debt' else 'repayment'
+            self.transaction_manager.add_transaction(
+                entry_id=entry.id,
+                transaction_type=trans_type,
+                **dialog.transaction_data
+            )
+            self.update_entry_status(entry)
+            self.save_and_refresh()
+
     def show_debt_snowball(self):
         active_debts = [e for e in self.ledger_manager.get_all_entries() if e.entry_type == 'debt' and e.status == 'active']
         if not active_debts:
