@@ -366,8 +366,8 @@ class MainWindow(QMainWindow):
         snowball_action.triggered.connect(self.show_debt_snowball)
         whatif_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView)), "What-If Calculator", self)
         whatif_action.triggered.connect(self.show_what_if_calc)
-        networth_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton)), "Log Net Worth Snapshot", self)
-        networth_action.triggered.connect(self.log_net_worth)
+        networth_action = QAction(QIcon(s.standardIcon(QStyle.StandardPixmap.SP_ToolBarVerticalExtensionButton)), "Log Net Position Snapshot", self)
+        networth_action.triggered.connect(self.log_net_position)
         tools_menu.addAction(snowball_action)
         tools_menu.addAction(whatif_action)
         tools_menu.addAction(networth_action)
@@ -654,7 +654,7 @@ class MainWindow(QMainWindow):
         self.bar_chart_canvas.draw()
         
         self.line_ax.clear()
-        self.line_ax.set_title('Net Worth Over Time', color='white')
+        self.line_ax.set_title('Net Position Over Time', color='white')
         self.line_ax.tick_params(axis='x', colors='white')
         self.line_ax.tick_params(axis='y', colors='white')
         self.line_ax.spines['bottom'].set_color('#d8dee9')
@@ -668,7 +668,7 @@ class MainWindow(QMainWindow):
             self.line_ax.plot(dates, values, marker='o', color='#88c0d0')
             self.line_ax.figure.autofmt_xdate()
         else:
-            self.line_ax.text(0.5, 0.5, 'Log at least two snapshots to see a trend', ha='center', va='center', color='gray')
+            self.line_ax.text(0.5, 0.5, 'At least two snapshots needed to see a trend', ha='center', va='center', color='gray')
         self.line_chart_canvas.draw()
 
     def refresh_ledger_list(self):
@@ -1003,15 +1003,26 @@ class MainWindow(QMainWindow):
             eta_string = calculate_what_if_eta(self.ledger_manager.get_all_entries(), self.transaction_manager.get_all_transactions(), dialog.amount)
             QMessageBox.information(self, "What-If Result", eta_string)
 
-    def log_net_worth(self):
+    def log_net_position(self):
+        """Manually log a net position snapshot (also happens automatically on save)."""
+        self._record_net_position_snapshot()
+        net_pos = self.net_worth_manager.get_all_snapshots()[0].net_position
+        QMessageBox.information(self, "Snapshot Logged", f"Net position snapshot logged: ${net_pos:,.2f}")
+        self.save_and_refresh()
+
+    def _record_net_position_snapshot(self):
+        """Auto-records a net position snapshot if it has changed since the last one."""
         all_e = self.ledger_manager.get_all_entries()
         all_t = self.transaction_manager.get_all_transactions()
         debt_bal = sum(calculate_balance_for_entry(e, all_t) for e in all_e if e.entry_type == 'debt')
         loan_bal = sum(calculate_balance_for_entry(e, all_t) for e in all_e if e.entry_type == 'loan')
         net_pos = loan_bal - debt_bal
+
+        # Only record if the value has changed since the last snapshot
+        snapshots = self.net_worth_manager.get_all_snapshots()
+        if snapshots and abs(snapshots[0].net_position - net_pos) < 0.01:
+            return
         self.net_worth_manager.add_snapshot(net_pos)
-        QMessageBox.information(self, "Net Worth Logged", f"Successfully logged a new net worth snapshot of ${net_pos:,.2f}.")
-        self.save_and_refresh()
 
     # --- Helper & Utility Methods ---
 
@@ -1024,7 +1035,8 @@ class MainWindow(QMainWindow):
             entry.status = 'active'
     
     def save_and_refresh(self):
-        """Saves all data to disk, refreshes the UI, and shows a status message."""
+        """Saves all data to disk, auto-logs net position, refreshes the UI."""
+        self._record_net_position_snapshot()
         self.storage_manager.save_data(self.ledger_manager, self.transaction_manager, self.journal_manager, self.net_worth_manager)
         self.refresh_ui()
         self.statusBar().showMessage("Data Saved!", 2000)
