@@ -1,44 +1,21 @@
-from typing import List
 from datetime import datetime, timedelta, timezone
 from Backend.core.ledger_manager import LedgerEntry
 from Backend.core.transaction_manager import Transaction
 
 def calculate_total_entry_amount(entries: list[LedgerEntry]) -> float:
-    """Calculates the sum of amounts for a list of ledger entries."""
-    total_amount = 0.0
-    for entry in entries:
-        total_amount += entry.amount
-    return total_amount
+    return sum(e.amount for e in entries)
 
 def calculate_total_transaction_amount(transactions: list[Transaction]) -> float:
-    """Calculates the sum of amounts for a list of transactions."""
-    total_amount = 0.0
-    for transaction in transactions:
-        total_amount += transaction.amount
-    return total_amount
-
-def calculate_overall_balance(total_entries: float, total_transactions: float) -> float:
-    """Calculates the overall remaining balance."""
-    return total_entries - total_transactions
-
-def get_transactions_for_entry(entry_id: str, all_transactions: list[Transaction]) -> list[Transaction]:
-    """Returns a list of all transactions associated with a specific ledger entry."""
-    transactions_for_this_entry = []
-    for transaction in all_transactions:
-        if transaction.entry_id == entry_id:
-            transactions_for_this_entry.append(transaction)
-    return transactions_for_this_entry
+    return sum(t.amount for t in transactions)
 
 def calculate_balance_for_entry(entry: LedgerEntry, all_transactions: list[Transaction]) -> float:
     """Calculates the remaining balance for a single ledger entry."""
-    transactions_for_this_entry = get_transactions_for_entry(entry.id, all_transactions)
-    total_paid_for_this_entry = calculate_total_transaction_amount(transactions_for_this_entry)
-    remaining_balance = entry.amount - total_paid_for_this_entry
-    return remaining_balance
+    paid = sum(t.amount for t in all_transactions if t.entry_id == entry.id)
+    return entry.amount - paid
 
 def calculate_entry_eta(entry: LedgerEntry, all_transactions: list[Transaction]) -> str:
     """Calculates the smart ETA for a single ledger entry."""
-    transactions_for_this_entry = get_transactions_for_entry(entry.id, all_transactions)
+    transactions_for_this_entry = [t for t in all_transactions if t.entry_id == entry.id]
     num_transactions = len(transactions_for_this_entry)
 
     if num_transactions == 0:

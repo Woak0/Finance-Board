@@ -442,19 +442,19 @@ class MainWindow(QMainWindow):
     def create_pie_chart(self):
         fig, self.pie_ax = plt.subplots(facecolor='#2e3440')
         self.pie_ax.set_facecolor('#2e3440')
-        plt.subplots_adjust(left=0.1, right=0.75, top=0.9, bottom=0.1)
+        fig.subplots_adjust(left=0.1, right=0.75, top=0.9, bottom=0.1)
         return FigureCanvas(fig)
 
     def create_bar_chart(self):
         fig, self.bar_ax = plt.subplots(facecolor='#2e3440')
         self.bar_ax.set_facecolor('#2e3440')
-        plt.subplots_adjust(left=0.15, right=0.95, top=0.9, bottom=0.25)
+        fig.subplots_adjust(left=0.15, right=0.95, top=0.9, bottom=0.25)
         return FigureCanvas(fig)
 
     def create_line_chart(self):
         fig, self.line_ax = plt.subplots(facecolor='#2e3440')
         self.line_ax.set_facecolor('#2e3440')
-        plt.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.2)
+        fig.subplots_adjust(left=0.1, right=0.95, top=0.9, bottom=0.2)
         return FigureCanvas(fig)
 
     def _create_details_panel_widgets(self):

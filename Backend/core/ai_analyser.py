@@ -14,7 +14,7 @@ class FinancialAnalyser:
             "parser": "mistralai/mistral-7b-instruct:free", 
             "analyst": "mistralai/mistral-7b-instruct:free", 
         }
-        print("AI Analyser initialised.")
+        pass
 
     def _call_ai(self, system_prompt: str, user_prompt: str, model_key: str = "analyst", is_json_mode: bool = False) -> str:
         """Private helper to call the external AI API with a separated prompt and specified model."""
@@ -40,7 +40,6 @@ class FinancialAnalyser:
             data["response_format"] = {"type": "json_object"}
 
         try:
-            print(f"Contacting AI assistant (using model: {data['model']})...")
             response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=90)
             response.raise_for_status()
             response_json = response.json()
@@ -180,5 +179,4 @@ class FinancialAnalyser:
         try:
             return json.loads(ai_response_str)
         except json.JSONDecodeError:
-            print(f"DEBUG: AI returned non-JSON response: {ai_response_str}")
             return {"commands": [{"action": "unknown", "payload": {"reason": "AI failed to generate a valid command."}}]}

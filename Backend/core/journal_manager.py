@@ -32,22 +32,12 @@ class JournalManager:
         self.entries: list[JournalEntry] = []
 
     def add_entry(self, content: str, tags: Optional[list[str]] = None):
-        tags_to_save = tags if tags is not None else []
-        new_entry = JournalEntry(content=content, tags=tags_to_save)
+        new_entry = JournalEntry(content=content, tags=tags if tags is not None else [])
         self.entries.append(new_entry)
-        print("Journal entry added.")
         return new_entry
 
     def get_all_entries(self) -> list[JournalEntry]:
         return sorted(self.entries, key=lambda e: e.date_created, reverse=True)
-    
+
     def delete_entry_by_id(self, entry_id: str):
-        """
-        Removes a journal entry from the list by its ID.
-        """
-        initial_count = len(self.entries)
         self.entries = [e for e in self.entries if e.id != entry_id]
-        if len(self.entries) < initial_count:
-            print(f"Deleted journal entry with ID: {entry_id}")
-        else:
-            print(f"Warning: Could not find journal entry with ID {entry_id} to delete.")
